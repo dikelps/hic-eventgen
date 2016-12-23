@@ -19,7 +19,7 @@ inputfiles=${@:3}
 timestamp="$(date --utc +%Y%m%d_%H%M%S)"
 
 # gridftp destination for all events in this batch
-desturl="gsiftp://ntheoryfs01.phy.duke.edu/var/phy/project/nukeserv/$USER/hic-events/$batchlabel"
+desturl="gsiftp://ntheoryfs01.phy.duke.edu/var/phy/project/nukeserv/jsm55/bayesian-subnucleonic/$batchlabel"
 
 # create a "scratch" directory for all the condor files
 scratchdir="/local-scratch/$USER/condor/$batchlabel/$timestamp"
