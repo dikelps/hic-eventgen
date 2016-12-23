@@ -7,7 +7,7 @@
 	url = https://github.com/Duke-QCD/freestream.git
 [submodule "models/vishnew"]
 	path = models/vishnew
-	url = https://github.com/jbernhard/vishnew.git
+	url = https://github.com/morelandjs/vishnew.git
 [submodule "models/frzout"]
 	path = models/frzout
 	url = https://github.com/jbernhard/frzout.git
