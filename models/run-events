@@ -77,8 +77,8 @@ def main():
         config = {}
 
     nevents = 10
-    grid_step = 0.1
-    grid_max = 13.05
+    grid_step = 0.02
+    grid_max = 2.01
 
     # run trento and yield initial entropy density arrays
     def initial_conditions(initial_file='initial.hdf'):
