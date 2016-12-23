@@ -78,13 +78,13 @@ def main():
 
     nevents = 10
     grid_step = 0.02
-    grid_max = 2.01
+    grid_max = 5.01
 
     # run trento and yield initial entropy density arrays
     def initial_conditions(initial_file='initial.hdf'):
         run_cmd(
-            './bin/trento Pb Pb', str(nevents),
-            '--cross-section 6.4',
+            './bin/trento p Pb', str(nevents),
+            '--cross-section 7',
             '--grid-step {} --grid-max {}'.format(grid_step, grid_max),
             '--output', initial_file,
             config.get('trento_args', '')
