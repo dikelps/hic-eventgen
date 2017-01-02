@@ -85,6 +85,9 @@ done
 # install the event runner script
 cp -v models/run-events $pkgdir
 
+# copy trento cross section cache file
+mkdir -p $pkgdir/share/trento && curl -L http://goo.gl/MEVwhs > "$_/cross_section.dat"
+
 # create tgz for distributing to each job
 tar --verbose --create --gzip --file $destdir/$pkgname.tar.gz \
   --directory $installdir $pkgname

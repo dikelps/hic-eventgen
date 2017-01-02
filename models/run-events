@@ -84,7 +84,8 @@ def main():
     def initial_conditions(initial_file='initial.hdf'):
         run_cmd(
             './bin/trento Pb Pb', str(nevents),
-            '--cross-section 6.4',
+            '--nucleon-min-dist 1',
+            '--cross-section 7',
             '--grid-step {} --grid-max {}'.format(grid_step, grid_max),
             '--output', initial_file,
             config.get('trento_args', '')
@@ -99,7 +100,7 @@ def main():
     enable_fs = tau_fs > 1e-6
 
     # create sampler HRG object (to be reused for all events)
-    Tswitch = float(config.get('Tswitch', .15))
+    Tswitch = .15
     hrg = frzout.HRG(Tswitch, species='urqmd', res_width=True)
     eswitch = hrg.energy_density()
 

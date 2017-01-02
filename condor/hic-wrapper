@@ -16,6 +16,9 @@ pkgname='hic-osg'
 tar xzf $pkgname.tar.gz
 cd $pkgname
 
+# export XDG_DATA_HOME
+export XDG_DATA_HOME=$(pwd)/share
+
 # run the events
 ./run-events ../$inputfile || exit 1
 
