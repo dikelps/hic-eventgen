@@ -8,6 +8,7 @@
 [submodule "models/vishnew"]
 	path = models/vishnew
 	url = https://github.com/morelandjs/vishnew.git
+	branch = qm17
 [submodule "models/frzout"]
 	path = models/frzout
 	url = https://github.com/jbernhard/frzout.git
