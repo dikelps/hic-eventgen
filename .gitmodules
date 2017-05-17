@@ -1,7 +1,6 @@
 [submodule "models/trento"]
 	path = models/trento
-	url = https://github.com/morelandjs/trento-dev.git
-	branch = quarks
+	url = https://github.com/morelandjs/trento-partons.git
 [submodule "models/freestream"]
 	path = models/freestream
 	url = https://github.com/Duke-QCD/freestream.git
