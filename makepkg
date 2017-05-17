@@ -1,5 +1,9 @@
 #!/bin/bash
 
+export CFLAGS='-ffast-math'
+export FFLAGS=$CFLAGS
+export CXXFLAGS=$CFLAGS
+
 # extra preparation when compiling on OSG submit hosts
 if [[ $(hostname) =~ opensciencegrid.org|osgconnect.net ]]; then
   # load lmod
@@ -12,17 +16,18 @@ if [[ $(hostname) =~ opensciencegrid.org|osgconnect.net ]]; then
   #  - hdf5 for trento
   #  - python and packages
   module purge
-  module load gcc cmake boost hdf5 python/3.5.2 all-pkgs
+  module load gcc/6.2.0 python/3.5.2 all-pkgs cmake boost/1.62.0-cxx11 hdf5/1.8.13-cxx11
 
   # the modules set the standard environment variables CPATH and LIBRARY_PATH
   # set corresponding variables for cmake
   export CMAKE_INCLUDE_PATH=$CPATH
   export CMAKE_LIBRARY_PATH=$LIBRARY_PATH
 
-  # set compiler flags
-  export CXXFLAGS="-march=x86-64 -mtune=intel"
-  export CFLAGS="$CXXFLAGS -Wno-declaration-after-statement"
-  export FFLAGS="$CXXFLAGS"
+  # set compiler architecture flags
+  arch_flags='-march=x86-64 -mtune=intel'
+  export CFLAGS="$arch_flags $CFLAGS"
+  export FFLAGS="$arch_flags $FFLAGS"
+  export CXXFLAGS="$arch_flags $CXXFLAGS"
 
   # explicitly set fortran compiler to override cmake default
   export FC='gfortran'
@@ -56,24 +61,26 @@ for i in models/*/; do
       cd build
     else
       mkdir build && cd build
-      # disable install prefix by setting it to "/"
-      # the actual install location will be set by DESTDIR later
       cmake \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="/" \
+        -DCMAKE_INSTALL_PREFIX=/ \
         .. || exit 1
     fi
 
     # compile and install to the temporary directory
     make --jobs=$(nproc) DESTDIR=$pkgdir install || exit 1
   elif [[ -f setup.py ]]; then
-    # install python packages with custom scheme
+    # install python packages
     python3 setup.py install \
       --no-compile \
       --root=$pkgdir \
-      --install-lib=lib/python \
-      --install-scripts=bin \
+      --prefix= \
       || exit 1
+
+    # let python find packages in the temporary directory -- this is necessary
+    # because generating the eos table for osu-hydro requires frzout (note
+    # frzout installs first because it's alphabetically ahead)
+    export PYTHONPATH="$(echo $pkgdir/lib/python*/site-packages)"
   else
     echo "unknown build system for model $i"
     exit 1
@@ -83,7 +90,7 @@ for i in models/*/; do
 done
 
 # install the event runner script
-cp -v models/run-events $pkgdir
+install -v models/run-events $pkgdir/bin
 
 # copy trento cross section cache file
 mkdir -p $pkgdir/share/trento && curl -L http://goo.gl/MEVwhs > "$_/cross_section.dat"
