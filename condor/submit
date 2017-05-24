@@ -19,7 +19,7 @@ inputfiles=${@:3}
 timestamp="$(date --utc +%Y%m%d_%H%M%S)"
 
 # gridftp destination for all events in this batch
-desturl="gsiftp://ntheoryfs01.phy.duke.edu/var/phy/project/nukeserv/jsm55/bayesian-subnucleonic/$batchlabel"
+desturl="gsiftp://ntheoryfs01.phy.duke.edu/var/phy/project/nukeserv/jsm55/events/$batchlabel"
 
 # create a "scratch" directory for all the condor files
 scratchdir="/local-scratch/$USER/condor/${timestamp}_${batchlabel//\//_}"
@@ -77,8 +77,8 @@ job_machine_attrs = Machine
 job_machine_attrs_history_length = $histlen
 requirements = $requirements
 
-request_memory = 500M
-request_disk = 500M
+request_memory = 2.5G
+request_disk = 2.5G
 rank = KFlops
 
 executable = $exefile
