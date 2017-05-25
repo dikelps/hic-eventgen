@@ -176,8 +176,6 @@ def run_events(args, results_file):
                     else:
                         smin, smax = mult_range
                         if smin < dset.attrs['mult'] < smax:
-                            print(dset.attrs['mult'])
-                            print()
                             yield dset
 
     # if nevents was specified, generate that number of initial conditions
