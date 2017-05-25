@@ -2,7 +2,7 @@
 
 import argparse
 import datetime
-from itertools import chain, repeat
+from itertools import chain, repeat, islice
 import logging
 import math
 import os
@@ -119,7 +119,8 @@ parser.add_argument(
     help='particlization temperature [GeV] (default: %(default).3f GeV)'
 )
 parser.add_argument(
-    '--mult-range', nargs=2, type=float,
+    '--mult-range',
+    type=lambda t: tuple(float(x) for x in t.split(',')),
     help='minimum and maximum initial entropy cuts'
 )
 
@@ -138,17 +139,19 @@ def run_events(args, results_file):
     Return True if at least one event completed successfully, otherwise False.
 
     """
+    grid_max_prerun = 15 if 'p Pb' in args.trento_args else 27
     grid_step = .15*args.parton_width
-    grid_n = math.ceil(2*10/grid_step)
+    grid_n = math.ceil(2*grid_max_prerun/grid_step)
     grid_max = .5*grid_n*grid_step
     logging.info(
         'grid step = %.6f fm, n = %d, max = %.6f fm',
         grid_step, grid_n, grid_max
     )
 
-    def _initial_conditions(srange=None, samples=1000, initial_file='initial.hdf'):
+    def _initial_conditions(mult_range=None, samples=1000, initial_file='initial.hdf'):
         """
         Run trento and yield HDF5 datasets.
+        If entropy cuts are specified, yield events in the specified range.
 
         """
         while True:
@@ -168,19 +171,21 @@ def run_events(args, results_file):
 
             with h5py.File(initial_file, 'r') as f:
                 for dset in f.values():
-                    if srange is None:
-                        yield np.array(dset)
+                    if mult_range is None:
+                        yield dset
                     else:
-                        smin, smax = srange
+                        smin, smax = mult_range
                         if smin < dset.attrs['mult'] < smax:
-                            yield np.array(dset)
+                            print(dset.attrs['mult'])
+                            print()
+                            yield dset
 
     # if nevents was specified, generate that number of initial conditions
     # otherwise generate indefinitely
     initial_conditions = (
-        chain.from_iterable(_initial_conditions() for _ in repeat(None))
+        _initial_conditions(mult_range=args.mult_range)
         if args.nevents is None else
-        _initial_conditions(args.nevents)
+        islice(_initial_conditions(mult_range=args.mult_range), args.nevents)
     )
 
     # create sampler HRG object (to be reused for all events)
@@ -192,10 +197,10 @@ def run_events(args, results_file):
     hydro_args = [args.hydro_args, 'edec={}'.format(eswitch)]
 
     # arguments for "coarse" hydro pre-runs
-    # no viscosity, run down to low temperature 120 MeV
+    # no viscosity, run down to low temperature 110 MeV
     hydro_args_coarse = [
         'etas_hrg=0 etas_min=0 etas_slope=0 zetas_max=0 zetas_width=0',
-        'edec={}'.format(frzout.HRG(.12, **hrg_kwargs).energy_density())
+        'edec={}'.format(frzout.HRG(.11, **hrg_kwargs).energy_density())
     ]
 
     def run_hydro(fs, event_size, coarse=False, dt_ratio=.25):
