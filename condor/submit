@@ -77,13 +77,14 @@ job_machine_attrs = Machine
 job_machine_attrs_history_length = $histlen
 requirements = $requirements
 
-request_memory = 2.5G
-request_disk = 2.5G
+request_memory = 2400MB
+request_disk = 2400MB
 rank = KFlops
 
 executable = $exefile
 input_file = \$BASENAME(input_file_path)
-arguments = \$(input_file) $desturl/\$(input_file)/$timestamp/\$(dag_node_name)
+event_cuts = \$BASENAME(\$DIRNAME(input_file_path))
+arguments = \$(input_file) $desturl/\$(input_file)/\$(event_cuts)/$timestamp/\$(dag_node_name)
 
 transfer_input_files = $pkgfile, \$(input_file_path)
 +TransferOutput = ""
