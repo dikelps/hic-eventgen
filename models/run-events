@@ -99,8 +99,20 @@ parser.add_argument(
     help='log level (default: %(default)s)'
 )
 parser.add_argument(
+    '--nevents', type=int, default=None,
+    help='Number of events in bin (default: %(default)s)'
+)
+parser.add_argument(
+    '--mult-range', type=float, default=.2,
+    help='Grid scale factor (default: %(default)s)'
+)
+parser.add_argument(
+    '--grid-scale', type=float, default=.2,
+    help='Grid scale factor (default: %(default)s)'
+)
+parser.add_argument(
     '--parton-width', type=float, default=.5,
-    help='trento parton width [fm] (default: %(default)s fm)'
+    help='Parton width [fm] (default: %(default)s fm)'
 )
 parser.add_argument(
     '--trento-args', default='Pb Pb',
@@ -115,7 +127,7 @@ parser.add_argument(
     help='arguments passed to osu-hydro (default: empty)'
 )
 parser.add_argument(
-    '--Tswitch', type=float, default=.150,
+    '--Tswitch', type=float, default=.151,
     help='particlization temperature [GeV] (default: %(default).3f GeV)'
 )
 parser.add_argument(
@@ -140,7 +152,7 @@ def run_events(args, results_file):
 
     """
     grid_max_ic = 12 if 'p Pb' in args.trento_args else 15
-    grid_step = .15*args.parton_width
+    grid_step = args.grid_scale*args.parton_width
     grid_n = math.ceil(2*grid_max_ic/grid_step)
     grid_max = .5*grid_n*grid_step
     logging.info(
@@ -148,12 +160,14 @@ def run_events(args, results_file):
         grid_step, grid_n, grid_max
     )
 
-    def _initial_conditions(mult_range=None, samples=1000, initial_file='initial.hdf'):
+    def _initial_conditions(mult_range=None, mult_mean=1., samples=1000):
         """
         Run trento and yield HDF5 datasets.
         If entropy cuts are specified, yield events in the specified range.
 
         """
+        initial_file='initial.hdf'
+
         while True:
             try:
                 os.remove(initial_file)
@@ -174,16 +188,16 @@ def run_events(args, results_file):
                     if mult_range is None:
                         yield dset
                     else:
-                        smin, smax = mult_range
-                        if smin < dset.attrs['mult'] < smax:
+                        mult_min, mult_max = mult_range
+                        if mult_min < dset.attrs['mult']/mult_mean < mult_max:
                             yield dset
 
     # if nevents was specified, generate that number of initial conditions
     # otherwise generate indefinitely
     initial_conditions = (
-        _initial_conditions(mult_range=args.mult_range)
+        _initial_conditions(mult_range=args.mult_range, mult_mean=args.mult_mean)
         if args.nevents is None else
-        islice(_initial_conditions(mult_range=args.mult_range), args.nevents)
+        islice(_initial_conditions(mult_range=args.mult_range, mult_mean=args.mult_mean), args.nevents)
     )
 
     # create sampler HRG object (to be reused for all events)
