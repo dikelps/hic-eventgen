@@ -9,6 +9,7 @@ import os
 import signal
 import subprocess
 import sys
+from random import choice
 
 import numpy as np
 import h5py
@@ -99,14 +100,6 @@ parser.add_argument(
     help='log level (default: %(default)s)'
 )
 parser.add_argument(
-    '--nevents', type=int, default=None,
-    help='Number of events in bin (default: %(default)s)'
-)
-parser.add_argument(
-    '--mult-range', type=float, default=.2,
-    help='Grid scale factor (default: %(default)s)'
-)
-parser.add_argument(
     '--grid-scale', type=float, default=.2,
     help='Grid scale factor (default: %(default)s)'
 )
@@ -129,11 +122,6 @@ parser.add_argument(
 parser.add_argument(
     '--Tswitch', type=float, default=.151,
     help='particlization temperature [GeV] (default: %(default).3f GeV)'
-)
-parser.add_argument(
-    '--mult-range',
-    type=lambda t: tuple(float(x) for x in t.split(',')),
-    help='minimum and maximum initial entropy cuts'
 )
 
 
@@ -160,13 +148,19 @@ def run_events(args, results_file):
         grid_step, grid_n, grid_max
     )
 
-    def _initial_conditions(mult_range=None, mult_mean=1., samples=1000):
+    def trento(mult_range=None, samples=1000, initial_file='initial.hdf'):
         """
-        Run trento and yield HDF5 datasets.
-        If entropy cuts are specified, yield events in the specified range.
+        Run trento and yield HDF5 datasets. Sample experimental trigger and apply
+        multiplicity cuts if necessary. Default behavior is minimum bias.
 
         """
-        initial_file='initial.hdf'
+        mult_ranges = [
+            (0.042, 0.882), (0.882, 1.723), (1.723, 2.563),
+            (2.563, 3.403), (3.403, 4.244), (4.244, 5.084),
+            (5.084, 5.924), (1.250, 1.500), (1.500, 2.000),
+            (2.000, 2.500), (2.500, 3.000), (3.000, 3.750),
+            (3.750, 4.625), (4.625, 5.500), (5.500, 6.500),
+        ]
 
         while True:
             try:
@@ -175,7 +169,7 @@ def run_events(args, results_file):
                 pass
 
             run_cmd(
-                'trento',
+                'trento p Pb',
                 '--number-events {}'.format(samples),
                 '--grid-step {} --grid-max {}'.format(grid_step, grid_max),
                 '--output', initial_file,
@@ -183,21 +177,30 @@ def run_events(args, results_file):
                 args.trento_args
             )
 
+            # apply trigger only to p+Pb
+            if 'p Pb' in args.trento_args:
+
+                # min bias observables require ~15% of overall stats
+                rand = np.random.rand()
+                mult_range = choice(mult_ranges) if rand > 0.15 else None
+
             with h5py.File(initial_file, 'r') as f:
+                avg_mult = np.mean(
+                    [ev.attrs['mult'] for ev in f.values()]
+                )
+
                 for dset in f.values():
-                    if mult_range is None:
-                        yield dset
+                    if mult_range:
+                        min_mult, max_mult = mult_range
+                        if min_mult < dset.attrs['mult']/avg_mult < max_mult:
+                            yield (dset, mult_range)
                     else:
-                        mult_min, mult_max = mult_range
-                        if mult_min < dset.attrs['mult']/mult_mean < mult_max:
-                            yield dset
+                        yield (dset, None)
 
     # if nevents was specified, generate that number of initial conditions
     # otherwise generate indefinitely
     initial_conditions = (
-        _initial_conditions(mult_range=args.mult_range, mult_mean=args.mult_mean)
-        if args.nevents is None else
-        islice(_initial_conditions(mult_range=args.mult_range, mult_mean=args.mult_mean), args.nevents)
+        trento() if args.nevents is None else islice(trento(), args.nevents)
     )
 
     # create sampler HRG object (to be reused for all events)
@@ -314,6 +317,7 @@ def run_events(args, results_file):
     # to be overwritten for each event
     results = np.empty((), dtype=[
         ('initial_entropy', float_t),
+        ('mult_range', (float_t, float_t)),
         ('nsamples', int_t),
         ('dNch_deta', float_t),
         ('dET_deta', float_t),
@@ -323,7 +327,7 @@ def run_events(args, results_file):
         ('flow', [('N', int_t), ('Qn', complex_t, 8)]),
     ])
 
-    def run_single_event(ic):
+    def run_single_event(ic, mult_range):
         """
         Run the initial condition event contained in HDF5 dataset object `ic`
         and save observables to `results`.
@@ -331,6 +335,7 @@ def run_events(args, results_file):
         """
         results.fill(0)
         results['initial_entropy'] = ic.attrs['mult']
+        results['mult_range'] = mult_range
 
         # read initial density array from dataset
         density = np.array(ic)
@@ -442,11 +447,11 @@ def run_events(args, results_file):
     nfail = 0
 
     # run each initial condition event and save results to file
-    for n, ic in enumerate(initial_conditions, start=1):
+    for n, (ic, mult_range) in enumerate(initial_conditions, start=1):
         logging.info('starting event %d', n)
 
         try:
-            run_single_event(ic)
+            run_single_event(ic, mult_range)
         except StopEvent as e:
             logging.info('event stopped: %s', e)
         except Exception:
