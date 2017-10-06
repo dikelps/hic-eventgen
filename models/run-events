@@ -206,7 +206,8 @@ def run_events(args, results_file):
             if 'p Pb' in args.trento_args:
 
                 # min bias observables require ~15% of overall stats
-                mult_range = weighted_choice(triggers) if np.random.rand() > 0.1 else None
+                mult_range = (weighted_choice(triggers)
+                              if np.random.rand() > 0.075 else None)
 
             with h5py.File(initial_file, 'r') as f:
                 avg_mult = np.mean([ev.attrs['mult'] for ev in f.values()])
