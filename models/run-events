@@ -114,7 +114,7 @@ def parse_args_checkpoint():
 
         try:
             with open(path, 'rb') as f:
-                args, ic = pickle.load(f)
+                args, ic, trigger = pickle.load(f)
         except Exception as e:
             msg = '{}: {}'.format(type(e).__name__, e)
             if path not in msg:
@@ -129,7 +129,7 @@ def parse_args_checkpoint():
                 .format(path, args.checkpoint)
             )
 
-        return args, ic
+        return args, ic, trigger
 
     return parser.parse_args(), None
 
@@ -172,8 +172,12 @@ parser.add_argument(
     help='log level (default: %(default)s)'
 )
 parser.add_argument(
-    '--grid-step', type=float, default=.1,
-    help='Grid step dxy (default: %(default)s fm)'
+    '--grid-scale', type=float, default=.2,
+    help='grid scale (default: %(default)s)'
+)
+parser.add_argument(
+    '--parton-width', type=float, default=.5,
+    help='parton width (default: %(default)s fm)'
 )
 parser.add_argument(
     '--trento-args', default='Pb Pb', metavar='ARGS',
@@ -209,7 +213,7 @@ def run_events(args, results_file, checkpoint_ic=None):
 
     """
     grid_max_ic = 12 if 'p Pb' in args.trento_args else 15
-    grid_step = args.grid_step
+    grid_step = args.grid_scale * args.parton_width
     grid_n = math.ceil(2*grid_max_ic/grid_step)
     grid_max = .5*grid_n*grid_step
     logging.info(
@@ -235,7 +239,7 @@ def run_events(args, results_file, checkpoint_ic=None):
     def _initial_conditions(samples=1000, initial_file='initial.hdf'):
         """
         Run trento and yield HDF5 datasets. Sample experimental trigger and apply
-        multiplicity cuts if necessary. Default behavior is minimum bias.
+        multiplicity cuts if necessary.
 
         """
         triggers = [
@@ -268,25 +272,30 @@ def run_events(args, results_file, checkpoint_ic=None):
                 '--number-events {}'.format(samples),
                 '--grid-step {} --grid-max {}'.format(grid_step, grid_max),
                 '--output', initial_file,
-                args.trento_args
+                '--parton-width {}'.format(args.parton_width),
+                args.trento_args,
             )
 
             # apply trigger only to p+Pb
             if 'p Pb' in args.trento_args:
 
                 # min bias observables require ~15% of overall stats
-                min_mult, max_mult = (
+                trigger = (
                     weighted_choice(triggers)
                     if np.random.rand() > 0.075 else (0, float('inf'))
                 )
+            else:
+                trigger = (0, float('inf'))
+
 
             with h5py.File(initial_file, 'r') as f:
 
                 # average initial condition 'multiplicity'
-                avg_mult = np.mean([ev.attrs['mult'] for ev in f.values()])
+                mean_mult = np.mean([ev.attrs['mult'] for ev in f.values()])
+                min_mult, max_mult = trigger
 
                 for dset in filter(
-                        lambda d: min_mult < d.attrs['mult']/avg_mult < max_mult,
+                        lambda d: min_mult < d.attrs['mult']/mean_mult < max_mult,
                         f.values()):
 
                     ic = np.array(dset)
@@ -296,10 +305,10 @@ def run_events(args, results_file, checkpoint_ic=None):
                     # saved.  If / when all events complete, delete the file.
                     if args.checkpoint is not None:
                         with open(args.checkpoint, 'wb') as cf:
-                            pickle.dump((args, ic), cf, pickle.HIGHEST_PROTOCOL)
+                            pickle.dump((args, ic, trigger), cf, pickle.HIGHEST_PROTOCOL)
                         logging.info('wrote checkpoint file %s', args.checkpoint)
 
-                    yield ic
+                    yield ic, trigger
 
     if checkpoint_ic is None:
         # if nevents was specified, generate that number of initial conditions
@@ -426,6 +435,7 @@ def run_events(args, results_file, checkpoint_ic=None):
     # results "array" (one element)
     # to be overwritten for each event
     results = np.empty((), dtype=[
+        ('trigger', (float_t, 2)),
         ('initial_entropy', float_t),
         ('nsamples', int_t),
         ('dNch_deta', float_t),
@@ -436,13 +446,14 @@ def run_events(args, results_file, checkpoint_ic=None):
         ('flow', [('N', int_t), ('Qn', complex_t, 8)]),
     ])
 
-    def run_single_event(ic):
+    def run_single_event(ic, trigger):
         """
         Run the initial condition event contained in HDF5 dataset object `ic`
         and save observables to `results`.
 
         """
         results.fill(0)
+        results['trigger'] = trigger
         results['initial_entropy'] = ic.sum() * grid_step**2
 
         assert all(n == grid_n for n in ic.shape)
@@ -455,8 +466,11 @@ def run_events(args, results_file, checkpoint_ic=None):
 
         # run coarse event on large grid and determine max radius
         grid_max_hydro = 15 if 'p Pb' in args.trento_args else 27
+        coarse = 3 if grid_step < .3 else 2
         rmax = math.sqrt((
-            run_hydro(fs, event_size=grid_max_hydro, coarse=3)['x'][:, 1:3]**2
+            run_hydro(
+                fs, event_size=grid_max_hydro, coarse=coarse
+            )['x'][:, 1:3]**2
         ).sum(axis=1).max())
         logging.info('rmax = %.3f fm', rmax)
 
@@ -531,6 +545,10 @@ def run_events(args, results_file, checkpoint_ic=None):
         pT = parts['pT']
         phi = parts['phi']
 
+        cut = charged & (abs_eta < .3) & (.15 < pT) & (pT < 10.)
+        N = np.count_nonzero(cut)
+        results['mean_pT'][None] = (0. if N == 0 else pT[cut].mean())
+
         for name, i in species:
             cut = (abs_ID == i) & midrapidity
             N = np.count_nonzero(cut)
@@ -543,20 +561,23 @@ def run_events(args, results_file, checkpoint_ic=None):
         results['pT_fluct']['sum_pTsq'] = np.inner(pT_alice, pT_alice)
 
         phi_alice = phi[charged & (abs_eta < .8) & (.2 < pT) & (pT < 5.)]
-        results['flow']['N'] = phi_alice.size
+        phi_cms = phi[charged & (abs_eta < .8) & (.3 < pT) & (pT < 3.)] 
+        phi_sys = (phi_cms if 'p Pb' in args.trento_args else phi_alice)
+
+        results['flow']['N'] = phi_sys.size
         results['flow']['Qn'] = [
-            np.exp(1j*n*phi_alice).sum()
+            np.exp(1j*n*phi_sys).sum()
             for n in range(1, results.dtype['flow']['Qn'].shape[0] + 1)
         ]
 
     nfail = 0
 
     # run each initial condition event and save results to file
-    for n, ic in enumerate(initial_conditions, start=1):
+    for n, (ic, trigger) in enumerate(initial_conditions, start=1):
         logging.info('starting event %d', n)
 
         try:
-            run_single_event(ic)
+            run_single_event(ic, trigger)
         except StopEvent as e:
             logging.info('event stopped: %s', e)
         except Exception:
