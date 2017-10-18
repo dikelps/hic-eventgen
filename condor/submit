@@ -19,7 +19,7 @@ inputfiles=${@:3}
 timestamp="$(date --utc +%Y%m%d_%H%M%S)"
 
 # gridftp destination for all events in this batch
-desturl="gsiftp://ntheoryfs01.phy.duke.edu/var/phy/project/nukeserv/jsm55/events/$batchlabel"
+desturl="gsiftp://ntheoryfs01.phy.duke.edu/var/phy/project/nukeserv/jsm55/hic-events/$batchlabel"
 
 # create a "scratch" directory for all the condor files
 scratchdir="/local-scratch/$USER/condor/${timestamp}_${batchlabel//\//_}"
@@ -83,8 +83,7 @@ rank = KFlops
 
 executable = $exefile
 input_file = \$BASENAME(input_file_path)
-event_cuts = \$BASENAME(\$DIRNAME(input_file_path))
-arguments = \$(input_file) $desturl/\$(input_file)/\$(event_cuts)/$timestamp/\$(dag_node_name)
+arguments = \$(input_file) $desturl/\$(input_file)/$timestamp/\$(dag_node_name)
 
 transfer_input_files = $pkgfile, \$(input_file_path)
 +TransferOutput = ""

@@ -2,7 +2,7 @@
 
 import argparse
 import datetime
-from itertools import chain, repeat
+from itertools import chain, islice, repeat
 import logging
 import math
 import os
@@ -212,9 +212,9 @@ def run_events(args, results_file, checkpoint_ic=None):
     Return True if at least one event completed successfully, otherwise False.
 
     """
-    grid_max_ic = 12 if 'p Pb' in args.trento_args else 15
+    grid_max_orig = 12 if 'p Pb' in args.trento_args else 15
     grid_step = args.grid_scale * args.parton_width
-    grid_n = math.ceil(2*grid_max_ic/grid_step)
+    grid_n = math.ceil(2*grid_max_orig/grid_step)
     grid_max = .5*grid_n*grid_step
     logging.info(
         'grid step = %.6f fm, n = %d, max = %.6f fm',
@@ -242,7 +242,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         multiplicity cuts if necessary.
 
         """
-        triggers = [
+        pPb_triggers = [
             ((0.042, 0.882),  1),
             ((0.882, 1.722),  1),
             ((1.722, 2.563),  1),
@@ -260,33 +260,28 @@ def run_events(args, results_file, checkpoint_ic=None):
             ((5.500, 6.500), 10),
         ]
 
+        min_bias = (0, float('inf'))
+        pPb_event = ('p Pb' in args.trento_args)
+        run_min_bias = (False if pPb_event and np.random.rand() > 0.075 else True)
+
+        trigger = (min_bias if run_min_bias else weighted_choice(pPb_triggers))
+        logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
+
         while True:
             try:
                 os.remove(initial_file)
-                print('running new batch of trento events')
+                logging.info('running new batch of trento events')
             except FileNotFoundError:
                 pass
 
             run_cmd(
                 'trento',
                 '--number-events {}'.format(samples),
-                '--grid-step {} --grid-max {}'.format(grid_step, grid_max),
+                '--grid-step {} --grid-max {}'.format(grid_step, grid_max_orig),
                 '--output', initial_file,
                 '--parton-width {}'.format(args.parton_width),
                 args.trento_args,
             )
-
-            # apply trigger only to p+Pb
-            if 'p Pb' in args.trento_args:
-
-                # min bias observables require ~15% of overall stats
-                trigger = (
-                    weighted_choice(triggers)
-                    if np.random.rand() > 0.075 else (0, float('inf'))
-                )
-            else:
-                trigger = (0, float('inf'))
-
 
             with h5py.File(initial_file, 'r') as f:
 
@@ -316,7 +311,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         initial_conditions = (
             chain.from_iterable(_initial_conditions() for _ in repeat(None))
             if args.nevents is None else
-            _initial_conditions(args.nevents)
+            islice(_initial_conditions(), args.nevents)
         )
     else:
         # just run the checkpointed IC
@@ -417,6 +412,7 @@ def run_events(args, results_file, checkpoint_ic=None):
 
     # species (name, ID) for identified particle observables
     species = [
+        ('charged', None),
         ('pion', 211),
         ('kaon', 321),
         ('proton', 2212),
@@ -540,17 +536,16 @@ def run_events(args, results_file, checkpoint_ic=None):
             parts['ET'][abs_eta < ET_eta].sum() / (2*ET_eta) / nsamples
 
         abs_ID = np.abs(parts['ID'])
-        midrapidity = (np.fabs(parts['y']) < .5)
 
         pT = parts['pT']
         phi = parts['phi']
 
-        cut = charged & (abs_eta < .3) & (.15 < pT) & (pT < 10.)
-        N = np.count_nonzero(cut)
-        results['mean_pT'][None] = (0. if N == 0 else pT[cut].mean())
-
         for name, i in species:
-            cut = (abs_ID == i) & midrapidity
+            cut = (
+                charged & (abs_eta < .3) & (.15 < pT) & (pT < 10.)
+                if i is None else
+                (abs_ID == i) & (np.fabs(parts['y']) < .5)
+            )
             N = np.count_nonzero(cut)
             results['dN_dy'][name] = N / nsamples
             results['mean_pT'][name] = (0. if N == 0 else pT[cut].mean())
