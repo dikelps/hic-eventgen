@@ -294,7 +294,7 @@ def run_events(args, results_file, checkpoint_ic=None):
                 # event anisotropy changes little with event multiplicity, we
                 # artificially improve the sampling rate by scaling up the events
                 # for the most extreme multiplicity triggers.
-                renorm = 1.25 if min_mult > 5 else 1
+                renorm = 1.3 if min_mult > 5 else 1
 
                 for dset in filter(
                         lambda d: min_mult < renorm*d.attrs['mult']/mean_mult < max_mult,
@@ -549,7 +549,7 @@ def run_events(args, results_file, checkpoint_ic=None):
 
         for name, i in species:
             cut = (
-                charged & (abs_eta < .3) & (.15 < pT) & (pT < 10.)
+                charged & (abs_eta < .8) & (.15 < pT) & (pT < 10.)
                 if i is None else
                 (abs_ID == i) & (np.fabs(parts['y']) < .5)
             )
