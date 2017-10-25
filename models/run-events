@@ -19,9 +19,6 @@ import freestream
 import frzout
 
 
-from memory_profiler import profile
-
-
 def run_cmd(*args):
     """
     Run and log a subprocess.
@@ -204,7 +201,6 @@ class StopEvent(Exception):
     """ Raise to end an event early. """
 
 
-@profile
 def run_events(args, results_file, checkpoint_ic=None):
     """
     Run events as determined by user input:
@@ -294,11 +290,11 @@ def run_events(args, results_file, checkpoint_ic=None):
                 min_mult, max_mult = trigger
 
                 # it's difficult to generate minimum bias events with large
-                # multiplicity fluctuations, e.g. Nch/<Nch> > 4. Since the
-                # event eccentricity changes little with event multiplicity, we
+                # multiplicity fluctuations, e.g. Nch/<Nch> > 5. Since the
+                # event anisotropy changes little with event multiplicity, we
                 # artificially improve the sampling rate by scaling up the events
                 # for the most extreme multiplicity triggers.
-                renorm = 1.5 if min_mult > 4 else 1
+                renorm = 1.25 if min_mult > 5 else 1
 
                 for dset in filter(
                         lambda d: min_mult < renorm*d.attrs['mult']/mean_mult < max_mult,
