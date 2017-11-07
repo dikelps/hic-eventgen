@@ -129,7 +129,7 @@ def parse_args_checkpoint():
                 .format(path, args.checkpoint)
             )
 
-        return args, ic, trigger
+        return args, (ic, trigger)
 
     return parser.parse_args(), None
 
