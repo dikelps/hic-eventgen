@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 job="${NERSC_HOST}-${SLURM_JOB_ID}"
 
 for (( n = 0; n < $#; ++n )); do
