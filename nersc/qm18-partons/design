@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --partition regular
 #SBATCH --constraint haswell
-#SBATCH --nodes 1
+#SBATCH --nodes 5
 #SBATCH --cpus-per-task 1
-#SBATCH --time 01:00:00
+#SBATCH --time 10:00:00
 #SBATCH --license cscratch1
 #SBATCH --mail-type ALL
 #SBATCH --mail-user morelandjs@gmail.com
@@ -20,4 +20,4 @@ exe=design-wrapper
 sbcast ~/hic-eventgen/nersc/qm18-partons/$exe /tmp/$exe  # change source path to actual location
 
 # change path to match all design input files
-srun /tmp/$exe qm18-partons/main/*/*
+srun /tmp/$exe $(<reruns/parton_width_bug)

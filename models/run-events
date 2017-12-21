@@ -262,7 +262,7 @@ def run_events(args, results_file, checkpoint_ic=None):
 
         min_bias = (0, float('inf'))
         pPb_event = ('p Pb' in args.trento_args)
-        run_min_bias = (False if pPb_event and np.random.rand() > 0.075 else True)
+        run_min_bias = (False if pPb_event and np.random.rand() > 0.05 else True)
 
         trigger = (min_bias if run_min_bias else weighted_choice(pPb_triggers))
         logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
