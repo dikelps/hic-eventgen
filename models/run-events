@@ -221,7 +221,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         grid_step, grid_n, grid_max
     )
 
-    def _initial_conditions(samples=1000, initial_file='initial.hdf'):
+    def trento(samples=10**3, initial_file='initial.hdf'):
         """
         Run trento and yield HDF5 datasets. Sample experimental trigger and apply
         multiplicity cuts if necessary.
@@ -245,16 +245,22 @@ def run_events(args, results_file, checkpoint_ic=None):
             ((5.500, 6.500), 10),
         ]
 
-        bins, weights = zip(*pPb_trigger)
+        bins, weights = zip(*pPb_triggers)
         prob = [w/sum(weights) for w in weights]
-        random_trigger, _ = pPb_triggers[np.random.choice(len(pPb_trigger), p=prob)]
+        random_trigger, _ = pPb_triggers[np.random.choice(len(pPb_triggers), p=prob)]
 
         min_bias = (0, float('inf'))
         pPb_event = ('p Pb' in args.trento_args)
         trigger = (random_trigger if (pPb_event and np.random.rand() > .2) else min_bias)
         logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
 
-        while True:
+        def sample_event(renorm=1.0):
+            """
+            Attempts to sample an event with the specified trigger cut. If the
+            event trigger is too restrictive, the function calls itself with a
+            slightly larger event normalization (mimics rare event fluctuations).
+
+            """
             try:
                 os.remove(initial_file)
                 logging.info('running new batch of trento events')
@@ -281,8 +287,6 @@ def run_events(args, results_file, checkpoint_ic=None):
                 # event anisotropy changes little with event multiplicity, we
                 # artificially improve the sampling rate by scaling up the events
                 # for the most extreme multiplicity triggers.
-                renorm = 1.3 if min_mult > 5 else 1
-
                 for dset in filter(
                         lambda d: min_mult < renorm*d.attrs['mult']/mean_mult < max_mult,
                         f.values()):
@@ -297,15 +301,22 @@ def run_events(args, results_file, checkpoint_ic=None):
                             pickle.dump((args, ic, trigger), cf, pickle.HIGHEST_PROTOCOL)
                         logging.info('wrote checkpoint file %s', args.checkpoint)
 
-                    yield ic, trigger
+                    return ic, trigger
+
+            logging.info('event not found, renorm={:.2f}'.format(1.1*renorm))
+            return sample_event(renorm=1.1*renorm)
+    
+       # yield events indefinitely
+       while True:
+           yield sample_event()
 
     if checkpoint_ic is None:
         # if nevents was specified, generate that number of initial conditions
         # otherwise generate indefinitely
         initial_conditions = (
-            chain.from_iterable(_initial_conditions() for _ in repeat(None))
+            chain.from_iterable(trento() for _ in repeat(None))
             if args.nevents is None else
-            islice(_initial_conditions(), args.nevents)
+            islice(trento(), args.nevents)
         )
     else:
         # just run the checkpointed IC
