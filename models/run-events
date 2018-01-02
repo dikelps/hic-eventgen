@@ -221,21 +221,6 @@ def run_events(args, results_file, checkpoint_ic=None):
         grid_step, grid_n, grid_max
     )
 
-    def weighted_choice(choices):
-        """
-        Make a weighted random choice from a list.
-
-        """
-        total = sum([weight for choice, weight in choices])
-        rand = np.random.uniform(0, total) 
-        upto = 0
-        for choice, weight in choices:
-            if upto + weight >= rand:
-                return choice
-            upto += weight
-
-        raise StopEvent('error sampling observable bin')
-
     def _initial_conditions(samples=1000, initial_file='initial.hdf'):
         """
         Run trento and yield HDF5 datasets. Sample experimental trigger and apply
@@ -260,11 +245,12 @@ def run_events(args, results_file, checkpoint_ic=None):
             ((5.500, 6.500), 10),
         ]
 
-        min_bias = (0, float('inf'))
-        pPb_event = ('p Pb' in args.trento_args)
-        run_min_bias = (False if pPb_event and np.random.rand() > 0.05 else True)
+        bins, weights = zip(*pPb_trigger)
+        prob = [w/sum(weights) for w in weights]
+        random_trigger, _ = pPb_triggers[np.random.choice(len(pPb_trigger), p=prob)]
 
-        trigger = (min_bias if run_min_bias else weighted_choice(pPb_triggers))
+        min_bias = (0, float('inf'))
+        trigger = (random_trigger if (pPb_event and np.random.rand() > .2) else min_bias)
         logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
 
         while True:
@@ -482,7 +468,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         surface = frzout.Surface(**run_hydro(fs, event_size=rmax), ymax=2)
         logging.info('%d freeze-out cells', len(surface))
 
-        minsamples, maxsamples = 10, 5000  # reasonable range for nsamples
+        minsamples, maxsamples = 10, 10**4  # reasonable range for nsamples
         minparts = 10**5  # min number of particles to sample
         nparts = 0  # for tracking total number of sampled particles
 
