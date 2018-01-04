@@ -1,4 +1,4 @@
-#!/bin/bash -l
+#!/bin/bash
 #SBATCH --partition regular
 #SBATCH --constraint haswell
 #SBATCH --nodes 1
@@ -10,7 +10,7 @@
 #SBATCH --output /global/cscratch1/sd/jsm55/slurm/%x-%j
 #SBATCH --error  /global/cscratch1/sd/jsm55/slurm/%x-%j
 
-export CONDA_PREFIX=/global/common/software/m2730/qm18-partons
+export CONDA_PREFIX=/global/common/software/<project>/<prefix>
 export PATH=$CONDA_PREFIX/bin:$PATH
 export XDG_DATA_HOME=$CONDA_PREFIX/share
 

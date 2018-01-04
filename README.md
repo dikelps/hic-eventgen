@@ -12,6 +12,7 @@ _heavy-ion collision event generator_
 
 The collision model consists of the following stages:
 
+<<<<<<< HEAD
 - [trento](https://github.com/Duke-QCD/trento) — initial conditions
 - [freestream](https://github.com/Duke-QCD/freestream) — pre-equilibrium
 - [OSU hydro](https://github.com/jbernhard/osu-hydro) — viscous 2+1D hydrodynamics
@@ -34,9 +35,34 @@ Prerequisites:
 - C, C++, and Fortran compilers
 - CMake 3.4+
 - Boost and HDF5 C++ libraries
+=======
+- [trento](https://github.com/Duke-QCD/trento) – initial conditions
+- [freestream](https://github.com/Duke-QCD/freestream) – pre-equilibrium
+- [OSU hydro](https://github.com/jbernhard/osu-hydro) – viscous 2+1D hydrodynamics
+- [frzout](https://github.com/jbernhard/frzout) – particlization
+- [UrQMD](https://github.com/jbernhard/urqmd-afterburner) – hadronic afterburner
 
-Clone the repository with the `--recursive` option to acquire all submodules.
+Each is included as a git submodule in the [models](models) directory.
 
+:warning: git submodules have some annoying behavior.
+__Use the `--recursive` option when cloning this repository to also clone all submodules.__
+I suggest skimming the [section on submodules in the Pro Git book](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
+
+## Installation
+
+hic-eventgen is probably most useful on high-performance computational systems, but it can run locally for testing or generating a few events.
+
+### Computational systems
+
+- [Open Science Grid (OSG)](osg)
+- [NERSC](nersc)
+
+### Local
+>>>>>>> b1abc0ff0bf6c702474a885e2386cee9089f7b5b
+
+- [Local usage](local)
+
+<<<<<<< HEAD
 The models must be installed into an active Python [virtual environment](https://docs.python.org/3/library/venv.html) (venv) or a [conda environment](https://conda.io/docs/user-guide/tasks/manage-environments.html) (I suggest using [Miniconda](https://conda.io/miniconda.html)).
 
 If Python and its packages are already installed on your system, the easiest choice is probably a venv:
@@ -71,6 +97,12 @@ You can run it using its full path:
 
 ## Running events
 
+=======
+## Running events
+
+_general information for running on all systems_
+
+>>>>>>> b1abc0ff0bf6c702474a885e2386cee9089f7b5b
 The Python script [models/run-events](models/run-events) executes complete events and computes observables.
 The basic usage is
 
@@ -95,6 +127,11 @@ Ensure that the restrictions described above are satisfied.
 See also the docs for [trento](http://qcd.phy.duke.edu/trento) and [OSU hydro](https://github.com/jbernhard/osu-hydro).
 
 See `run-events --help` for the complete list of options.
+
+<<<<<<< HEAD
+### The hydro grid
+=======
+Options may also be specified [in files](#input-files).
 
 ### The hydro grid
 
@@ -138,6 +175,49 @@ The best solution would probably be some kind of scalable database (perhaps Mong
 If someone wants to do it, by all means go ahead!
 
 ### Input files
+>>>>>>> b1abc0ff0bf6c702474a885e2386cee9089f7b5b
+
+The computational grid for `osu-hydro` is determined adaptively for each event in order to achieve sufficient precision without wasting CPU time.
+
+The grid cell size is set proportionally to the nucleon width (specifically 15% of the width).
+So when the nucleon width is small, events run a fine grid to resolve the small-scale structures;
+for large nucleons, events run on a coarser (i.e. faster) grid.
+
+The physical extent of the grid is determined by running each event on a coarse grid with ideal hydro and recording the maximum size of the system.
+Then, the event is re-run on a grid trimmed to the max size.
+This way, central events run on large grids to accommodate their transverse expansion, while peripheral events run on small grids to save CPU time.
+Although pre-running each event consumes some time, this strategy is still a net benefit because of all the time saved from running peripheral events on small grids.
+
+### Event data format
+
+Event observables are written in __binary__ format with the data type defined in `run-events` (do a text search for "results = np.empty" to find it in the file).
+Many results files may be concatenated together:
+
+<<<<<<< HEAD
+    cat /path/to/results/* > events.dat
+
+In Python, read the binary files using [numpy.fromfile](https://docs.scipy.org/doc/numpy/reference/generated/numpy.fromfile.html).
+This returns [structured arrays](https://docs.scipy.org/doc/numpy/user/basics.rec.html) from which observables are accessed by their field names:
+
+```python
+import numpy as np
+events = np.fromfile('events.dat', dtype=<full dtype specification>)
+nch = events['dNch_deta']
+mean_pT_pion = events['mean_pT']['pion']
+```
+
+It's probably easiest to copy the relevant `dtype` code from `run-events`.
+
+I chose this plain binary data format because it's fast and space-efficient.
+On the other hand, it's inconvenient to fully specify the dtype when reading files, and organizing many small files can become unwieldy.
+
+A format with metadata, such as HDF5, is not a good choice because each event produces such a small amount of actual data.
+The metadata takes up too much space relative to the actual data and reading many small files is too slow.
+
+The best solution would probably be some kind of scalable database (perhaps MongoDB), but I simply haven't had time to get that up and running.
+If someone wants to do it, by all means go ahead!
+
+### Input files
 
 Options for `run-events` may be specified on the command line or in files.
 Files must have one option per line with `key = value` syntax, where the keys are the option names without the `--` prefix.
@@ -156,3 +236,69 @@ Input files are useful for saving logical groups of parameters, such as for a se
 
 - [Open Science Grid (OSG)](osg)
 - [NERSC](nersc)
+=======
+Input files are useful for saving logical groups of parameters, such as for a set of design points.
+
+### Parallel events
+
+`run-events` can be used as an MPI executable for running multiple events in parallel (this is most useful on HPC systems like NERSC).
+
+Option `--rankvar` must be given so that each `run-events` process can determine its rank.
+The basic usage is
+
+    mpirun [mpirun_options] run-events --rankvar <rank_env_var> ...
+
+where `<rank_env_var>` is the name of the rank environment variable set by `mpirun` for each process.
+For example, Open MPI sets `OMPI_COMM_WORLD_RANK`
+
+    mpirun [mpirun_options] run-events --rankvar OMPI_COMM_WORLD_RANK ...
+
+On SLURM systems (like at NERSC), `srun` sets `SLURM_PROCID`
+
+    srun [srun_options] run-events --rankvar SLURM_PROCID ...
+
+When running with `--rankvar`, output files become folders and each rank creates a file, e.g. `/path/to/results.dat` becomes `/path/to/results/<rank>.dat`.
+The formatting of `<rank>` may be controlled by option `--rankfmt`, which must be a [Python format string](https://docs.python.org/3/library/string.html#format-string-syntax).
+This is probably most useful for padding rank integers with zeros, e.g. `--rankfmt '{:02d}'`.
+
+When running in parallel, I recommend using the `--logfile` option so that each process writes its own log file, otherwise the output of all processes will intersperse on stdout.
+
+Full example:
+
+    mpirun -n 100 run-events \
+      --rankvar OMPI_COMM_WORLD_RANK \
+      --rankfmt '{:02d}' \
+      --logfile output.log \
+      results.dat
+
+This would create results files `results/00.dat`, `01.dat`, ..., `99.dat` and corresponding log files `output/00.log`, ..., `99.log`.
+
+### Checkpoints
+
+Events can be checkpointed and restarted if interrupted.
+The basic usage is
+
+    run-events --checkpoint <checkpoint_file_path> ...
+
+Before starting each event, checkpoint data is written to `<checkpoint_file_path>` in Python pickle format (for which I like the extension `.pkl`).
+If the event completes successfully, the checkpoint file is deleted.
+If the event is interrupted, it can be restarted later by
+
+    run-events checkpoint <checkpoint_file_path>
+
+(Note the differences from the first command: there is no `--` and no other options are accepted.)
+When running a checkpoint, the original results and log files are appended to.
+
+Example:
+
+    run-events --checkpoint ckpt.pkl --logfile output.log results.dat
+
+At some point, this process is interrupted:
+`results.dat` contains data for any events that have completed, `ckpt.pkl` contains the incomplete event, and `output.log` reflects this status.
+Then, sometime later:
+
+    run-events checkpoint ckpt.pkl
+
+This will run the event saved in `ckpt.pkl`, appending to `results.dat` and `output.log`.
+Upon completion, `ckpt.pkl` is deleted.
+>>>>>>> b1abc0ff0bf6c702474a885e2386cee9089f7b5b

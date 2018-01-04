@@ -1,4 +1,4 @@
-#!/bin/bash -l
+#!/bin/bash
 #SBATCH --partition regular
 #SBATCH --constraint haswell
 #SBATCH --nodes 100

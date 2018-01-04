@@ -6,28 +6,40 @@ See https://www.nersc.gov/users/getting-started for general information.
 
 The models must be installed in a conda environment in the NERSC [global common file system](https://www.nersc.gov/users/storage-and-file-systems/file-systems/global-common-file-system), which is intended for software installation.
 
+See the [conda docs](https://conda.io/docs) for germane details.
+
 Download and install [Miniconda](https://conda.io/miniconda.html) on a NERSC machine:
 ```bash
 wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
-The default installation location `~/miniconda3` is fine.
+Install it somewhere in your home directory (the default location `~/miniconda3` is fine).
 
-Tip: to avoid having to source the conda activate script every time you login to NERSC, prepend the conda `bin` directory to your `PATH`.
-Add the following to your `~/.bashrc.ext`:
+The installer might ask if you want to prepend the conda install location to your `PATH`.
+This is a good idea, but on NERSC you cannot edit `~/.bashrc` itself (see [NERSC user environment](https://www.nersc.gov/users/software/nersc-user-environment)).
+Add to `~/.bashrc.ext` (or the equivalent file for your shell):
 ```bash
-export CONDA_PREFIX=$HOME/miniconda3
-export PATH="$CONDA_PREFIX/bin:$PATH"
+export PATH="$HOME/miniconda3/bin:$PATH"
 ```
 
-Create and activate an environment with the required libraries:
+While the file is open, you will probably need to set your locale language to a UTF-8 encoding, or you'll get unicode errors when installing the freestream model.
+```bash
+export LANG='en_US.UTF-8'  # or any other UTF-8 language
+```
+
+Now create and activate a conda environment with the required libraries:
 ```bash
 conda create -p /global/common/software/<project>/<prefix> numpy scipy cython h5py
 source activate /global/common/software/<project>/<prefix>
 ```
 where `<project>` is your NERSC project name and `<prefix>` is your desired name for the environment.
+This is the environment where all models will be installed:
 
-Now run the [install](install) script.
+- It must be active during installation (so the install script knows where to place files).
+- It must be activated in job batch scripts before running events (see below).
+- It does not need to be active when running `sbatch` to submit jobs or during any other general tasks on NERSC.
+
+With the environment prepared and active, run the [install](install) script.
 
 ## Running jobs
 
@@ -43,29 +55,45 @@ They will NOT work without some changes!__
 ### A single parameter point
 
 [examples/simple](examples/simple) shows how to run some events all at the same parameter point.
-It sets the necessary environment variables (be sure to replace `<project>` and `<prefix>` in `CONDA_PREFIX`) and then executes `run-events` via `srun`.
+
+__Environment configuration:__
+The export commands at the beginning activate the conda environment for running events (all batch scripts must do this).
+Be sure to replace `<project>` and `<prefix>` in `CONDA_PREFIX`.
 
 __Number of tasks:__
 I don't like the way the NERSC examples explicitly give the `-n` option to `srun`, because it depends on both the number of CPUs per node (which is different on Cori and Edison) and the number of nodes (which could be different for every job).
 Instead, I set the `--cpus-per-task` sbatch option so that every CPU runs a single task, regardless of the number of CPUs per node or the number of nodes.
 
-__Filesystem:__
-I use Cori scratch for all output files.
-The `$CSCRATCH` environment variable points to your user directory on Cori scratch.
+__Using run-events with srun:__
+`run-events` is treated as an MPI executable via `srun`.
+See section "parallel events" in the main readme.
 
-__Process rank:__
-`run-events` is treated as an MPI executable via `srun` (although the processes don't communicate with each other).
-Option `--rankvar SLURM_PROCID` is necessary so that `run-events` can determine its process rank (note that this is an option to `run-events`, not to `srun`).
-`run-events` reads its process rank from the environment variable and appends the rank to its output files, e.g. `/path/to/results.dat` becomes `/path/to/results/rank.dat`.
-The `--rankfmt` option allows formatting of the rank in filenames.
+__Filesystem:__
+I use Cori scratch for all output files;
+in my experience it provides sufficient performance even for large-scale jobs.
+The `$CSCRATCH` environment variable points to your user directory on Cori scratch.
 
 __Email notifications:__
 If you want email notifications for job status updates, enter your address for the `--mail-user` sbatch option.
 
 ### Multiple parameter points
 
-[examples/design](examples/design) demonstrates a strategy for running a set of parameter design points from input files.
+[examples/design](examples/design) demonstrates one method for running a set of parameter design points from input files.
 It's similar to the "simple" example, but uses the intermediate script [examples/design-wrapper](examples/design-wrapper) to assign each CPU to a design input file in round-robin fashion.
+
+__Considerations for large-scale jobs:__
+Running a design may require many nodes.
+For more than, say, 20 nodes, you should broadcast `design-wrapper` to the compute nodes in order to reduce job startup time.
+See [this NERSC example](https://www.nersc.gov/users/computational-systems/edison/running-jobs/example-batch-scripts/#toc-anchor-4).
+
+I also recommend placing input files on a high-performance filesystem, e.g. Cori scratch.
+
+__Relative paths to input files:__
+In this example, I have set the batch script working directory to `$CSCRATCH/inputfiles` and used relative paths to input files.
+Then, `design-wrapper` uses the relative paths in the output filenames.
+
+__Alternative methods:__
+There are other strategies for running multiple parameter points, such as [taskfarmer](https://www.nersc.gov/users/data-analytics/workflow-tools/taskfarmer) and [job arrays](https://www.nersc.gov/users/computational-systems/cori/running-jobs/example-batch-scripts#toc-anchor-16).
 
 ### Checkpoints (important!)
 
@@ -80,20 +108,8 @@ And since more central events take longer, this introduces a centrality bias int
 
 __More generally: once an event begins, it is part of the cross section, and it must be completed!__
 
-The solution to this is job checkpoints.
-When the `--checkpoint` option is given to `run-events`, before it starts each event it writes a checkpoint file containing the initial condition and all options in Python pickle format.
-Example:
-```bash
-run-events --checkpoint checkpoint.pkl --logfile events.log results.dat
-```
-If and when the event completes, the checkpoint file is deleted;
-if it does not complete, it can be resumed later from the checkpoint file using the syntax `run-events checkpoint <checkpoint_file>`.
-Continuing the example:
-```bash
-run-events checkpoint checkpoint.pkl
-```
-This will append to the original log and results files and delete the checkpoint file upon completion.
+The solution to this is job checkpoints, which are documented in the "checkpoints" section of the main readme.
 
 [examples/checkpoints-gnu-parallel](examples/checkpoints-gnu-parallel) shows how to run a batch of checkpoints using [GNU Parallel](https://www.gnu.org/software/parallel), which is suitable for a __single node__.
 
-[examples/checkpoints-taskfarmer](examples/checkpoints-taskfarmer) shows how to use [taskfarmer](https://www.nersc.gov/users/data-analytics/workflow-tools/taskfarmer), which can run on many nodes and is thus useful if you have too many checkpoints to run on one node in a reasonable time.
+[examples/checkpoints-taskfarmer](examples/checkpoints-taskfarmer) shows how to use [taskfarmer](https://www.nersc.gov/users/data-analytics/workflow-tools/taskfarmer), which can run on many nodes and is thus useful if you have too many checkpoints to run on a single node in a reasonable time.
