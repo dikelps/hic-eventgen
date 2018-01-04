@@ -247,11 +247,14 @@ def run_events(args, results_file, checkpoint_ic=None):
 
         bins, weights = zip(*pPb_triggers)
         prob = [w/sum(weights) for w in weights]
-        random_trigger, _ = pPb_triggers[np.random.choice(len(pPb_triggers), p=prob)]
+        random_trigger, _ = pPb_triggers[
+                np.random.choice(len(pPb_triggers), p=prob)
+                ]
 
         min_bias = (0, float('inf'))
-        pPb_event = ('p Pb' in args.trento_args)
-        trigger = (random_trigger if (pPb_event and np.random.rand() > .2) else min_bias)
+        pPb_event = any(sys in args.trento_args for sys in ['p Pb', 'Pb p'])
+        sample_trigger = (pPb_event and np.random.rand() > .2)
+        trigger = (random_trigger if sample_trigger else min_bias)
         logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
 
         def sample_event(renorm=1.0):
@@ -306,9 +309,9 @@ def run_events(args, results_file, checkpoint_ic=None):
             logging.info('event not found, renorm={:.2f}'.format(1.1*renorm))
             return sample_event(renorm=1.1*renorm)
     
-       # yield events indefinitely
-       while True:
-           yield sample_event()
+        # yield events indefinitely
+        while True:
+            yield sample_event()
 
     if checkpoint_ic is None:
         # if nevents was specified, generate that number of initial conditions
