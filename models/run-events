@@ -212,10 +212,12 @@ def run_events(args, results_file, checkpoint_ic=None):
     Return True if at least one event completed successfully, otherwise False.
 
     """
-    grid_max_orig = 12 if 'p Pb' in args.trento_args else 15
+    pPb_event = any(sys in args.trento_args for sys in ['p Pb', 'Pb p'])
+    grid_max_orig = 12 if pPb_event else 15
     grid_step = args.grid_scale * args.parton_width
     grid_n = math.ceil(2*grid_max_orig/grid_step)
     grid_max = .5*grid_n*grid_step
+
     logging.info(
         'grid step = %.6f fm, n = %d, max = %.6f fm',
         grid_step, grid_n, grid_max
@@ -251,10 +253,10 @@ def run_events(args, results_file, checkpoint_ic=None):
                 np.random.choice(len(pPb_triggers), p=prob)
                 ]
 
-        min_bias = (0, float('inf'))
-        pPb_event = any(sys in args.trento_args for sys in ['p Pb', 'Pb p'])
-        sample_trigger = (pPb_event and np.random.rand() > .2)
-        trigger = (random_trigger if sample_trigger else min_bias)
+        # 20% of p+Pb event sample should be minimum bias
+        sample_trigger = (pPb_event and np.random.rand() > 0.2)
+        trigger = (random_trigger if sample_trigger else (0, float('inf')))
+
         logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
 
         def sample_event(renorm=1.0):
@@ -307,6 +309,7 @@ def run_events(args, results_file, checkpoint_ic=None):
                     return ic, trigger
 
             logging.info('event not found, renorm={:.2f}'.format(1.1*renorm))
+
             return sample_event(renorm=1.1*renorm)
     
         # yield events indefinitely
@@ -421,13 +424,13 @@ def run_events(args, results_file, checkpoint_ic=None):
     # species (name, ID) for identified particle observables
     species = [
         ('charged', None),
-        ('pion', 211),
-        ('kaon', 321),
-        ('proton', 2212),
-        ('Lambda', 3122),
-        ('Sigma0', 3212),
-        ('Xi', 3312),
-        ('Omega', 3334),
+        ('pion',     211),
+        ('kaon',     321),
+        ('proton',  2212),
+        ('Lambda',  3122),
+        ('Sigma0',  3212),
+        ('Xi',      3312),
+        ('Omega',   3334),
     ]
 
     # fully specify numeric data types, including endianness and size, to
@@ -469,8 +472,8 @@ def run_events(args, results_file, checkpoint_ic=None):
         fs = freestream.FreeStreamer(ic, grid_max, args.tau_fs)
 
         # run coarse event on large grid and determine max radius
-        grid_max_hydro = 15 if 'p Pb' in args.trento_args else 27
-        coarse = 3 if grid_step < .3 else 2
+        grid_max_hydro = (15 if pPb_event else 27)
+        coarse = (3 if grid_step < .3 else 2)
         rmax = math.sqrt((
             run_hydro(
                 fs, event_size=grid_max_hydro, coarse=coarse
@@ -483,7 +486,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         surface = frzout.Surface(**run_hydro(fs, event_size=rmax), ymax=2)
         logging.info('%d freeze-out cells', len(surface))
 
-        minsamples, maxsamples = 10, 10**4  # reasonable range for nsamples
+        minsamples, maxsamples = 10, 5*10**4  # reasonable range for nsamples
         minparts = 10**5  # min number of particles to sample
         nparts = 0  # for tracking total number of sampled particles
 
@@ -521,14 +524,14 @@ def run_events(args, results_file, checkpoint_ic=None):
             parts = np.fromiter(
                 (tuple(l.split()) for l in f if not l.startswith(b'#')),
                 dtype=[
-                    ('ID', int),
+                    ('ID',     int),
                     ('charge', int),
-                    ('pT', float),
-                    ('ET', float),
-                    ('mT', float),
-                    ('phi', float),
-                    ('y', float),
-                    ('eta', float),
+                    ('pT',   float),
+                    ('ET',   float),
+                    ('mT',   float),
+                    ('phi',  float),
+                    ('y',    float),
+                    ('eta',  float),
                 ]
             )
 
@@ -548,11 +551,11 @@ def run_events(args, results_file, checkpoint_ic=None):
         pT = parts['pT']
         phi = parts['phi']
 
-        for name, i in species:
+        for name, pid in species:
             cut = (
                 charged & (abs_eta < .8) & (.15 < pT) & (pT < 10.)
-                if i is None else
-                (abs_ID == i) & (np.fabs(parts['y']) < .5)
+                if pid is None else
+                (abs_ID == pid) & (np.fabs(parts['y']) < .5)
             )
             N = np.count_nonzero(cut)
             results['dN_dy'][name] = N / nsamples
@@ -565,7 +568,7 @@ def run_events(args, results_file, checkpoint_ic=None):
 
         phi_alice = phi[charged & (abs_eta < .8) & (.2 < pT) & (pT < 5.)]
         phi_cms = phi[charged & (abs_eta < .8) & (.3 < pT) & (pT < 3.)] 
-        phi_sys = (phi_cms if 'p Pb' in args.trento_args else phi_alice)
+        phi_sys = (phi_cms if pPb_event else phi_alice)
 
         results['flow']['N'] = phi_sys.size
         results['flow']['Qn'] = [
