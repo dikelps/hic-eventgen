@@ -2,11 +2,13 @@
 
 import argparse
 import datetime
+from collections import defaultdict
 from itertools import chain, islice, repeat
 import logging
 import math
 import os
 import pickle
+from random import choices
 import signal
 import subprocess
 import sys
@@ -224,113 +226,106 @@ def run_events(args, results_file, checkpoint_ic=None):
         grid_step, grid_n, grid_max
     )
 
-    def trento(nevents=1, initial_file='initial.hdf'):
+    def trento(nsample=1000, initial_file='initial.hdf'):
         """
         Run trento and yield HDF5 datasets. Sample experimental trigger and apply
         multiplicity cuts if necessary.
 
         """
-        def pPb_trigger():
-            """
-            The LHC p+Pb observables are calculated using both minimum bias and
-            multiplicity cut triggers. This function samples a random relative
-            multiplicity trigger Nch/<Nch>.
+        try:
+            os.remove(initial_file)
+            logging.info('running new batch of trento events')
+        except FileNotFoundError:
+            pass
 
-            The <Nch>/<Nch> multiplicity triggers are sampled with varying
-            weights depending on the statistical precision needed to calculate
-            the observable they are associated with.
+        run_cmd(
+            'trento',
+            '--number-events {}'.format(nsample),
+            '--grid-step {} --grid-max {}'.format(grid_step, grid_max_orig),
+            '--output', initial_file,
+            '--parton-width {}'.format(args.parton_width),
+            args.trento_args,
+        )
+
+        used_events = defaultdict(list)
+
+        def triggers(nyield=10):
+            """
+            All Pb+Pb observables use a minimum bias trigger, while some p+Pb
+            observables are calculated from a minimum bias trigger and others
+            use specific multiplicity triggers. This function samples a list
+            of trigger bins (minimum bias or Nch/<Nch> cuts) for each job.
 
             """
-            triggers = [
-                ((0.042, 0.882),  1),
-                ((0.882, 1.722),  1),
-                ((1.722, 2.563),  1),
-                ((2.563, 3.403),  1),
-                ((3.403, 4.243),  1),
-                ((4.243, 5.084),  1),
-                ((5.084, 5.924),  1),
-                ((1.250, 1.500), 10),
-                ((1.500, 2.000), 10),
-                ((2.000, 2.500), 10),
-                ((2.500, 3.000), 10),
-                ((3.000, 3.750), 10),
-                ((3.750, 4.625), 10),
-                ((4.625, 5.500), 10),
-                ((5.500, 6.500), 10),
+            minimum_bias = (0, float('inf'))
+
+            pPb_bins = [
+                (     minimum_bias, 20),
+                ((0.042,    0.882),  1),
+                ((0.882,    1.722),  1),
+                ((1.722,    2.563),  1),
+                ((2.563,    3.403),  1),
+                ((3.403,    4.243),  1),
+                ((4.243,    5.084),  1),
+                ((5.084,    5.924),  1),
+                ((1.250,    1.500), 10),
+                ((1.500,    2.000), 10),
+                ((2.000,    2.500), 10),
+                ((2.500,    3.000), 10),
+                ((3.000,    3.750), 10),
+                ((3.750,    4.625), 10),
+                ((4.625,    5.500), 10),
+                ((5.500,    6.500), 10),
             ]
 
-            bins, weights = zip(*triggers)
-            prob = [w/sum(weights) for w in weights]
-
-            random_trigger, _ = triggers[
-                np.random.choice(len(triggers), p=prob)
-            ]
-
-            return random_trigger
-
-        def sample_event(trigger, ntries, renorm=1.0):
-            """
-            Attempts to sample an event with the specified trigger cut. If the
-            event trigger is too restrictive, the function calls itself with a
-            slightly larger event normalization (mimics rare event fluctuations).
-
-            """
-            try:
-                os.remove(initial_file)
-                logging.info('running new batch of trento events')
-            except FileNotFoundError:
-                pass
-
-            run_cmd(
-                'trento',
-                '--number-events {}'.format(ntries),
-                '--grid-step {} --grid-max {}'.format(grid_step, grid_max_orig),
-                '--output', initial_file,
-                '--parton-width {}'.format(args.parton_width),
-                args.trento_args,
+            pPb_triggers, pPb_weights = zip(*pPb_bins)
+            sampled_pPb_triggers = choices(
+                pPb_triggers, weights=pPb_weights, k=nyield
             )
 
-            with h5py.File(initial_file, 'r') as f:
+            return (sampled_pPb_triggers if pPb_event else nyield*[minimum_bias])
 
-                mean_mult = np.mean([ev.attrs['mult'] for ev in f.values()])
-
-                def trigger_hit(event):
-                    min_mult, max_mult = trigger
-                    return min_mult < renorm*event.attrs['mult']/mean_mult < max_mult
-
-                for event in filter(trigger_hit, f.values()):
-
-                    ic = renorm*np.array(event)
-
-                    # Write the checkpoint file _before_ starting the event so that
-                    # even if the process is forcefully killed, the state will be
-                    # saved.  If / when all events complete, delete the file.
-                    if args.checkpoint is not None:
-                        with open(args.checkpoint, 'wb') as cf:
-                            pickle.dump((args, ic, trigger), cf, pickle.HIGHEST_PROTOCOL)
-                        logging.info('wrote checkpoint file %s', args.checkpoint)
-
-                    return ic, trigger
-
-            logging.info('event not found, renorm={:.2f}'.format(1.1*renorm))
-
-            return sample_event(trigger, ntries, renorm=1.1*renorm)
-
-        while True:
+        def find_event(events, trigger, mean_mult, norm=1):
             """
-            Sample all Pb+Pb events with a minimum bias trigger.
-            Sample 20% of p+Pb events with a minimum bias trigger and the
-            remaining 80% with a randomly sampled multiplicity trigger.
+            Searches through the batch of trento events and looks for the first
+            event which satisfies the specified trigger,
+
+            trigger min < mult/mean_mult < trigger max
 
             """
-            minbias_trigger = (0, float('inf'))
-            sample_trigger = (pPb_event and np.random.rand() > 0.2)
-            trigger = (pPb_trigger() if sample_trigger else minbias_trigger)
-            ntries = (10**3 if sample_trigger else 1)
+            def trigger_hit(event):
+                return trigger[0] < norm*event.attrs['mult']/mean_mult < trigger[1]
 
-            logging.info('initial entropy/<entropy> trigger:{}'.format(trigger))
+            for event in filter(trigger_hit, events):
+                if event.name not in used_events[trigger]:
+                    used_events[trigger].append(event.name)
+                    return norm*np.array(event)
 
-            yield sample_event(trigger, ntries)
+            max_mult = max([
+                ev.attrs['mult'] for (n, ev) in enumerate(events)
+                if n not in used_events
+            ])
+
+            logging.info('trigger is too selective, increasing ic normalization')
+            scale = trigger[1] / (max_mult/mean_mult)
+            return find_event(events, trigger, mean_mult, norm=scale*norm)
+
+        with h5py.File(initial_file, 'r') as f:
+            mean_mult = np.mean([ev.attrs['mult'] for ev in f.values()])
+
+            for trigger in triggers():
+                ic = find_event(f.values(), trigger, mean_mult)
+                logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
+
+                # Write the checkpoint file _before_ starting the event so that
+                # even if the process is forcefully killed, the state will be
+                # saved.  If / when all events complete, delete the file.
+                if args.checkpoint is not None:
+                    with open(args.checkpoint, 'wb') as cf:
+                        pickle.dump((args, ic, trigger), cf, pickle.HIGHEST_PROTOCOL)
+                    logging.info('wrote checkpoint file %s', args.checkpoint)
+
+                yield ic, trigger
 
     if checkpoint_ic is None:
         # if nevents was specified, generate that number of initial conditions
