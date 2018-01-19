@@ -2,7 +2,7 @@
 
 import argparse
 import datetime
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from itertools import chain, islice, repeat
 import logging
 import math
@@ -211,43 +211,40 @@ class StopEvent(Exception):
 
 class Trento:
     """
-    Generates Pb+Pb and p+Pb Trento events using either a minimum bias trigger
-    or specialized high multiplicity trigger,
+    Generates p+Pb and Pb+Pb trento events using either a minimum bias
+    trigger or specialized high multiplicity trigger,
     
-    trigger low < mult/<mult> < trigger high
+    trigger low < mult/<mult> < trigger high,
 
     to mimic the event selection used by experiment.
 
     """
-    def __init__(self, args, nyield=10, nsample=10**1, initial_file='initial.hdf'):
+    def __init__(self, args, batch_size=10**3, initial_file='initial.hdf'):
         self.args = args
-        self.nyield = nyield
-        self.nsample = nsample
+        self.batch_size = batch_size
         self.initial_file = initial_file
 
         self.system = ' '.join(sorted(args.collision_system))
+        self.pPb_event = (self.system == 'Pb p')
+
         self.grid_step = args.grid_scale * args.parton_width
-        self.grid_max = {'Pb p': 12, 'Pb Pb': 15}[self.system]
+        self.grid_max = (12 if self.pPb_event else 15)
 
         self.used_events = defaultdict(list)
-        self.new_batch = True
 
     @property
     def triggers(self):
         """
         All Pb+Pb observables use a minimum bias trigger, while some p+Pb
         observables are calculated from a minimum bias trigger and others
-        use specific multiplicity triggers. This function samples a list
-        of trigger bins (minimum bias or mult/<mult> cuts) for each job.
+        use specific multiplicity triggers. This function yields trigger
+        bins (minimum bias or mult/<mult> cuts) for each event.
 
         """
         minimum_bias = (0, float('inf'))
 
         pPb_bins = [
-            # minimum bias sample
             (  minimum_bias, 20),
-
-            # mean pT Nch/<Nch> bins
             ((1.218, 1.303),  10),
             ((1.807, 1.891),  10),
             ((2.395, 2.479),  10),
@@ -256,8 +253,6 @@ class Trento:
             ((4.160, 4.244),  10),
             ((4.748, 4.832),  10),
             ((5.336, 5.420),  10),
-
-            # vn{2} Ntrk/<Ntrk> bins
             ((1.250, 1.500), 10),
             ((1.500, 2.000), 10),
             ((2.000, 2.500), 10),
@@ -269,16 +264,13 @@ class Trento:
         ]
 
         pPb_triggers, pPb_weights = zip(*pPb_bins)
-        sampled_pPb_triggers = choices(
-            pPb_triggers, weights=pPb_weights, k=self.nyield
-        )
 
-        return {
-            'Pb p': sampled_pPb_triggers,
-            'Pb Pb': self.nyield*[minimum_bias],
-        }[self.system]
+        while True:
+            trigger = choices(pPb_triggers, weights=pPb_weights).pop()
+            yield trigger if self.pPb_event else minimum_bias
 
-    def find_event(self, trigger, norm=1):
+
+    def find_event(self, trigger, norm=1, regen=False):
         """
         Searches through the batch of trento events and looks for the first
         event which satisfies the specified trigger,
@@ -292,7 +284,7 @@ class Trento:
         too narrow to find a suitable event.
 
         """
-        if self.new_batch:
+        if regen or not os.path.exists(self.initial_file):
             try:
                 os.remove(self.initial_file)
                 logging.info('running new batch of trento events')
@@ -301,47 +293,48 @@ class Trento:
 
             run_cmd(
                 'trento {}'.format(self.system),
-                '--number-events {}'.format(self.nsample),
+                '--number-events {}'.format(self.batch_size),
                 '--grid-step {} --grid-max {}'.format(self.grid_step, self.grid_max),
                 '--output', self.initial_file,
                 '--parton-width {}'.format(self.args.parton_width),
                 self.args.trento_args,
             )
 
-        with h5py.File(self.initial_file, 'r') as f:
-            events = [
-                ev for ev in f.values()
-                if ev.name not in self.used_events[trigger]
-            ]
+            self.used_events = defaultdict(list)
 
+        with h5py.File(self.initial_file, 'r') as f:
             mean_mult = np.mean([ev.attrs['mult'] for ev in f.values()])
+
+            def not_used(ev):
+                return ev.name not in self.used_events[trigger]
 
             def trigger_hit(ev):
                 mult = ev.attrs['mult']
-                return trigger[0] < norm*mult/mean_mult < trigger[1]
+                inside_bin = (trigger[0] < norm*mult/mean_mult < trigger[1])
+                return inside_bin and not_used(ev)
 
-            for ev in filter(trigger_hit, events):
+            for ev in filter(trigger_hit, f.values()):
                 self.used_events[trigger].append(ev.name)
-                self.new_batch = False
                 return norm*np.array(ev)
 
             max_event = max(
-                events, key=lambda ev: ev.attrs['mult'], default=None
-            )
-            relative_mult = max(
-                [ev.attrs['mult']/mean_mult for ev in events], default=1
+                filter(not_used, f.values()),
+                key=lambda ev: ev.attrs['mult'],
+                default=None
             )
 
-            if relative_mult < trigger[0]:
+            rescale = (
+                False if max_event is None else
+                (max_event.attrs['mult']/mean_mult < trigger[0])
+            )
+        
+            if rescale:
                 logging.info('trigger is too selective, increasing ic norm')
-                new_norm = trigger[1] / relative_mult
+                new_norm = trigger[1] / (max_event.attrs['mult']/mean_mult)
                 self.used_events[trigger].append(max_event.name)
-                self.new_batch = False
                 return self.find_event(trigger, norm=new_norm)
-            else:
-                self.used_events = defaultdict(list)
-                self.new_batch = True
-                return self.find_event(trigger)
+
+            return self.find_event(trigger, regen=True)
 
     def __iter__(self):
         """
@@ -349,8 +342,8 @@ class Trento:
 
         """
         for trigger in self.triggers:
-            ic = self.find_event(trigger)
             logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
+            ic = self.find_event(trigger)
 
             # Write the checkpoint file _before_ starting the event so that
             # even if the process is forcefully killed, the state will be
