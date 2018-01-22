@@ -531,7 +531,6 @@ def run_events(args, results_file, checkpoint_ic=None):
         results.fill(0)
         results['trigger'] = trigger
         results['initial_entropy'] = ic.sum() * grid_step**2
-        return
 
         assert all(n == grid_n for n in ic.shape)
 
