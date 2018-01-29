@@ -176,12 +176,12 @@ parser.add_argument(
     help='log level (default: %(default)s)'
 )
 parser.add_argument(
-    '--grid-scale', type=float, default=.2,
-    help='grid scale (default: %(default)s)'
-)
-parser.add_argument(
     '--collision-system', type=str, nargs=2, default=('Pb', 'Pb'),
     help='collision system (default: %(default)s)'
+)
+parser.add_argument(
+    '--grid-scale', type=float, default=.2,
+    help='grid scale (default: %(default)s)'
 )
 parser.add_argument(
     '--parton-width', type=float, default=.5,
