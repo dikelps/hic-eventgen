@@ -176,8 +176,8 @@ parser.add_argument(
     help='log level (default: %(default)s)'
 )
 parser.add_argument(
-    '--collision-system', type=str, nargs=2, default=('Pb', 'Pb'),
-    help='collision system (default: %(default)s)'
+    '--projectiles', type=str, default=('Pb Pb'),
+    help='collision system projectiles (default: %(default)s)'
 )
 parser.add_argument(
     '--grid-scale', type=float, default=.2,
@@ -224,7 +224,7 @@ class Trento:
         self.batch_size = batch_size
         self.initial_file = initial_file
 
-        self.system = ' '.join(sorted(args.collision_system))
+        self.system = ' '.join(sorted(args.projectiles.split()))
         self.pPb_event = (self.system == 'Pb p')
 
         self.grid_step = args.grid_scale * args.parton_width
