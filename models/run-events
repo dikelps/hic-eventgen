@@ -20,8 +20,6 @@ import h5py
 import freestream
 import frzout
 
-import matplotlib.pyplot as plt
-
 
 def run_cmd(*args):
     """
