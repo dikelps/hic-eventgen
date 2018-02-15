@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --partition regular
 #SBATCH --constraint haswell
-#SBATCH --nodes 1
+#SBATCH --nodes 30
 #SBATCH --ntasks-per-node 1
-#SBATCH --time 05:00:00
+#SBATCH --time 15:00:00
 #SBATCH --license cscratch1
 #SBATCH --mail-type ALL
 #SBATCH --mail-user morelandjs@gmail.com
@@ -16,5 +16,5 @@ export XDG_DATA_HOME=$CSCRATCH/share
 
 module load parallel
 
-find $CSCRATCH/checkpoints/cori-8523204 -type f | \
+find $CSCRATCH/checkpoints -type f | \
   srun parallel --verbose run-events checkpoint
