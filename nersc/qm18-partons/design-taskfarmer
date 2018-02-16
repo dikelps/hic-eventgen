@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --qos regular
 #SBATCH --constraint haswell
-#SBATCH --nodes 60
+#SBATCH --nodes 2
 #SBATCH --cpus-per-task 1
-#SBATCH --time 15:00:00
+#SBATCH --time 2:00:00
 #SBATCH --license cscratch1
 #SBATCH --mail-type ALL
 #SBATCH --mail-user morelandjs@gmail.com
@@ -19,7 +19,7 @@ export XDG_DATA_HOME=$CSCRATCH/share
 # design input files
 design=grid-extrap
 inputfiles=$(find $design -type f)
-ntasks=4000
+ntasks=1
 
 # unique job identifier
 job=$NERSC_HOST-$SLURM_JOB_ID
