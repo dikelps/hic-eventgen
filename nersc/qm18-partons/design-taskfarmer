@@ -1,42 +1,59 @@
 #!/bin/bash
 #SBATCH --qos regular
 #SBATCH --constraint haswell
-#SBATCH --nodes 30
+#SBATCH --nodes 60
 #SBATCH --cpus-per-task 1
-#SBATCH --time 20:00:00
+#SBATCH --time 15:00:00
 #SBATCH --license cscratch1
 #SBATCH --mail-type ALL
 #SBATCH --mail-user morelandjs@gmail.com
 #SBATCH --output  /global/cscratch1/sd/jsm55/slurm/%x-%j
 #SBATCH --error   /global/cscratch1/sd/jsm55/slurm/%x-%j
+#SBATCH --workdir /global/cscratch1/sd/jsm55/inputfiles
 
+# export environment variables
 export CONDA_PREFIX=/global/common/software/m2730/qm18-partons
 export PATH=$CONDA_PREFIX/bin:$PATH
 export XDG_DATA_HOME=$CSCRATCH/share
 
+# design input files
+design=grid-extrap
+inputfiles=$(find $design -type f)
+ntasks=4000
+
+# unique job identifier
+job=$NERSC_HOST-$SLURM_JOB_ID
+
+# list of input files and grid sizes
+function design_point_gridsize {
+  for file in $inputfiles; do
+    scale=$(grep grid-scale $file | awk '{print $NF}')
+    width=$(grep parton-width $file | awk '{print $NF}')
+    dxy=$(echo $scale*$width | bc)
+    echo $dxy $file
+  done
+}
+
+# sort input files by grid size (proxy for run time)
+inputfiles=$(design_point_gridsize | sort | awk '{print $NF}')
+
+# create taskfarmer working directory
 workdir=$CSCRATCH/taskfarmer/$SLURM_JOB_NAME-$NERSC_HOST-$SLURM_JOB_ID
 mkdir -p $workdir
 cd $workdir
 
-design=$CSCRATCH/events/grid-extrap/
-
-for dir in $(find $design -mindepth 3 -maxdepth 3); do
-  ncompleted=$(find $dir -type f | wc -l)
-  ((ntasks = 2000 - $ncompleted))
-
-  job=$NERSC_HOST-$SLURM_JOB_ID
-  file=${dir#/global/cscratch1/sd/jsm55/events}
-
+# create taskfarmer tasks
+for file in $inputfiles; do
   for task in $(seq -f "%05g" $ntasks); do
     echo run-events \
-      --nevents 10 \
+      --nevents 5 \
       --logfile $CSCRATCH/logs/$job/$file/$task.log \
       --checkpoint $CSCRATCH/checkpoints/$job/$task.pkl \
       @$CSCRATCH/inputfiles/$file \
       $CSCRATCH/events/$file/$job/$task.dat >> tasks
   done
-
 done
 
+# run tasks
 module load taskfarmer
 runcommands.sh tasks
