@@ -553,7 +553,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         surface = frzout.Surface(**run_hydro(fs, event_size=rmax), ymax=2)
         logging.info('%d freeze-out cells', len(surface))
 
-        minsamples, maxsamples = 10, 10**3  # reasonable range for nsamples
+        minsamples, maxsamples = 10, 10**4  # reasonable range for nsamples
         minparts = 10**5  # min number of particles to sample
         nparts = 0  # for tracking total number of sampled particles
 
