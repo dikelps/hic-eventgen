@@ -372,10 +372,7 @@ def run_events(args, results_file, checkpoint_ic=None):
 
     """
     trento_events = Trento(args)
-
-    system = trento_events.system 
     pPb_event = trento_events.pPb_event
-    parton_width = args.parton_width
 
     grid_step = trento_events.grid_step
     grid_n = math.ceil(2*trento_events.grid_max/grid_step)
