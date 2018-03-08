@@ -17,9 +17,9 @@ export PATH=$CONDA_PREFIX/bin:$PATH
 export XDG_DATA_HOME=$CSCRATCH/share
 
 # design input files
-design=qm18-partons/main/pPb5020
+design=fixed-seed/main/pPb5020
 inputfiles=$(find $design -type f)
-ntasks=2
+ntasks=1
 
 # unique job identifier
 job=$NERSC_HOST-$SLURM_JOB_ID
@@ -45,6 +45,7 @@ for file in $inputfiles; do
   for task in $(seq -f "%05g" $ntasks); do
     echo run-events \
       --nevents 5 \
+      --grid-scale 0.2 \
       --logfile $CSCRATCH/logs/$job/$file/$task.log \
       --checkpoint $CSCRATCH/checkpoints/$job/$task.pkl \
       @$CSCRATCH/inputfiles/$file \

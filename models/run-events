@@ -21,8 +21,6 @@ import freestream
 import frzout
 
 import random
-np.random.seed(1)
-random.seed(1)
 
 def run_cmd(*args):
     """
@@ -185,7 +183,7 @@ parser.add_argument(
     help='trento random seed (default: %(default)s)'
 )
 parser.add_argument(
-    '--grid-scale', type=float, default=.1,
+    '--grid-scale', type=float, default=.2,
     help='grid scale (default: %(default)s)'
 )
 parser.add_argument(
@@ -723,6 +721,9 @@ def run_events(args, results_file, checkpoint_ic=None):
 
 def main():
     args, checkpoint_ic = parse_args_checkpoint()
+
+    np.random.seed(args.random_seed)
+    random.seed(args.random_seed)
 
     if checkpoint_ic is None:
         # starting fresh -> truncate output files
