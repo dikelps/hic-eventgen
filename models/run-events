@@ -20,6 +20,9 @@ import h5py
 import freestream
 import frzout
 
+import random
+np.random.seed(1)
+random.seed(1)
 
 def run_cmd(*args):
     """
@@ -178,7 +181,11 @@ parser.add_argument(
     help='collision system projectiles (default: %(default)s)'
 )
 parser.add_argument(
-    '--grid-scale', type=float, default=.2,
+    '--random-seed', type=int, default=-1,
+    help='trento random seed (default: %(default)s)'
+)
+parser.add_argument(
+    '--grid-scale', type=float, default=.1,
     help='grid scale (default: %(default)s)'
 )
 parser.add_argument(
@@ -224,11 +231,13 @@ class Trento:
 
         self.system = ' '.join(sorted(args.projectiles.split()))
         self.pPb_event = (self.system == 'Pb p')
+        self.random_seed = args.random_seed
 
         self.grid_step = args.grid_scale * args.parton_width
         self.grid_max = (12 if self.pPb_event else 15)
 
         self.used = defaultdict(set)
+	
 
     @property
     def triggers(self):
@@ -293,8 +302,9 @@ class Trento:
                 'trento {}'.format(self.system),
                 '--number-events {}'.format(self.batch_size),
                 '--grid-step {} --grid-max {}'.format(self.grid_step, self.grid_max),
-                '--output', self.initial_file,
                 '--parton-width {}'.format(self.args.parton_width),
+                '--random-seed {}'.format(self.random_seed),
+                '--output', self.initial_file,
                 self.args.trento_args,
             )
 
@@ -330,6 +340,8 @@ class Trento:
                 (max_event.attrs['mult']/mean_mult < trigger[0]) and
                 not depleted_batch 
             )
+
+            self.random_seed += 1
 
             if renormalize:
                 logging.info('trigger is too selective, increasing ic norm')

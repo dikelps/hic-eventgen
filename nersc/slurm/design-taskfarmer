@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --qos regular
 #SBATCH --constraint haswell
-#SBATCH --nodes 2
-#SBATCH --cpus-per-task 1
-#SBATCH --time 2:00:00
+#SBATCH --nodes 5
+#SBATCH --ntasks-per-node 1
+#SBATCH --time 05:00:00
 #SBATCH --license cscratch1
 #SBATCH --mail-type ALL
 #SBATCH --mail-user morelandjs@gmail.com
@@ -17,9 +17,9 @@ export PATH=$CONDA_PREFIX/bin:$PATH
 export XDG_DATA_HOME=$CSCRATCH/share
 
 # design input files
-design=grid-extrap
+design=qm18-partons/main/pPb5020
 inputfiles=$(find $design -type f)
-ntasks=1
+ntasks=2
 
 # unique job identifier
 job=$NERSC_HOST-$SLURM_JOB_ID
@@ -27,10 +27,8 @@ job=$NERSC_HOST-$SLURM_JOB_ID
 # list of input files and grid sizes
 function design_point_gridsize {
   for file in $inputfiles; do
-    scale=$(grep grid-scale $file | awk '{print $NF}')
     width=$(grep parton-width $file | awk '{print $NF}')
-    dxy=$(echo $scale*$width | bc)
-    echo $dxy $file
+    echo $width $file
   done
 }
 
