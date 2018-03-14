@@ -722,9 +722,6 @@ def run_events(args, results_file, checkpoint_ic=None):
 def main():
     args, checkpoint_ic = parse_args_checkpoint()
 
-    np.random.seed(args.random_seed)
-    random.seed(args.random_seed)
-
     if checkpoint_ic is None:
         # starting fresh -> truncate output files
         filemode = 'w'
