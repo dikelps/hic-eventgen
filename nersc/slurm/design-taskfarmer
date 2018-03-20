@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --qos regular
 #SBATCH --constraint haswell
-#SBATCH --nodes 15
-#SBATCH --cpus-per-task 64
-#SBATCH --time 10:00:00
+#SBATCH --nodes 5
+#SBATCH --ntasks-per-node 1
+#SBATCH --time 05:00:00
 #SBATCH --license cscratch1
 #SBATCH --mail-type ALL
 #SBATCH --mail-user morelandjs@gmail.com
@@ -15,12 +15,11 @@
 export CONDA_PREFIX=/global/common/software/m2730/qm18-partons
 export PATH=$CONDA_PREFIX/bin:$PATH
 export XDG_DATA_HOME=$CSCRATCH/share
-export THREADS=32
 
 # design input files
 design=qm18-partons/main/pPb5020
 inputfiles=$(find $design -type f)
-ntasks=5
+ntasks=2
 
 # unique job identifier
 job=$NERSC_HOST-$SLURM_JOB_ID
