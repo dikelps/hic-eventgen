@@ -242,23 +242,23 @@ class Trento:
         minimum_bias = (0, float('inf'))
 
         pPb_bins = [
-            (  minimum_bias, 8),
-            ((1.218, 1.303), 1),
-            ((1.807, 1.891), 1),
-            ((2.395, 2.479), 1),
-            ((2.983, 3.067), 1),
-            ((3.571, 3.655), 1),
-            ((4.160, 4.244), 1),
-            ((4.748, 4.832), 1),
-            ((5.336, 5.420), 1),
-            ((1.250, 1.500), 5),
-            ((1.500, 2.000), 5),
-            ((2.000, 2.500), 5),
-            ((2.500, 3.000), 5),
-            ((3.000, 3.750), 5),
-            ((3.750, 4.625), 5),
-            ((4.625, 5.500), 5),
-            ((5.500, 6.000), 5),
+            (  minimum_bias,  8),
+            ((1.218, 1.303),  4),
+            ((1.807, 1.891),  4),
+            ((2.395, 2.479),  4),
+            ((2.983, 3.067),  4),
+            ((3.571, 3.655),  4),
+            ((4.160, 4.244),  4),
+            ((4.748, 4.832),  4),
+            ((5.336, 5.420),  4),
+            ((1.250, 1.500), 15),
+            ((1.500, 2.000), 15),
+            ((2.000, 2.500), 15),
+            ((2.500, 3.000), 15),
+            ((3.000, 3.750), 15),
+            ((3.750, 4.625), 15),
+            ((4.625, 5.500), 15),
+            ((5.500, 6.000), 15),
         ]
 
         pPb_triggers, pPb_weights = zip(*pPb_bins)
@@ -538,7 +538,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         fs = freestream.FreeStreamer(ic, grid_max, args.tau_fs)
 
         # run coarse event on large grid and determine max radius
-        coarse = 3 if pPb_event or args.parton_width > .5 else 4
+        coarse = 3 
 
         rmax = math.sqrt((
             run_hydro(
@@ -610,26 +610,27 @@ def run_events(args, results_file, checkpoint_ic=None):
         pT = parts['pT']
         phi = parts['phi']
 
+        eta_max = .8
+
         '''
         dNch/deta
 
         '''
         results['dNch_deta'] = \
-            np.count_nonzero(charged & (abs_eta < .5)) / nsamples
+            np.count_nonzero(charged & (abs_eta < eta_max)) / (2*eta_max) / nsamples
 
         '''
         dET/deta
 
         '''
-        ET_eta = .6
         results['dET_deta'] = \
-            parts['ET'][abs_eta < ET_eta].sum() / (2*ET_eta) / nsamples
+            parts['ET'][abs_eta < eta_max].sum() / (2*eta_max) / nsamples
 
         '''
         mean pT
 
         '''
-        cut = charged & (abs_eta < .3) & (.15 < pT) & (pT < 10.)
+        cut = charged & (abs_eta < eta_max) & (.15 < pT) & (pT < 10.)
         N = np.count_nonzero(cut)
         results['mean_pT'] = (
             N / nsamples,
