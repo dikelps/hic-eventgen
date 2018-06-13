@@ -211,7 +211,7 @@ class Trento:
     """
     Generates p+Pb and Pb+Pb trento events using either a minimum bias
     trigger or specialized high multiplicity trigger,
-    
+
     trigger low < mult/<mult> < trigger high,
 
     to mimic the event selection used by experiment.
@@ -327,7 +327,7 @@ class Trento:
             renormalize = (
                 (max_event is not None) and
                 (max_event.attrs['mult']/mean_mult < trigger[0]) and
-                not depleted_batch 
+                not depleted_batch
             )
 
             if renormalize:
@@ -504,6 +504,11 @@ def run_events(args, results_file, checkpoint_ic=None):
     int_t = '<i8'
     complex_t = '<c16'
 
+    # special data types
+    nharmonic = 8
+    mean_pT_t = [('N', float_t), ('pT', float_t)]
+    flow_t = [('N', int_t), ('Qn', complex_t, nharmonic)]
+
     # results "array" (one element)
     # to be overwritten for each event
     results = np.empty((), dtype=[
@@ -512,11 +517,11 @@ def run_events(args, results_file, checkpoint_ic=None):
         ('nsamples', int_t),
         ('dNch_deta', float_t),
         ('dET_deta', float_t),
-        ('mean_pT', [('N', float_t), ('pT', float_t)]),
+        ('mean_pT', mean_pT_t),
         ('iden_dN_dy', [(s, float_t) for (s, _) in species]),
-        ('iden_mean_pT', [(s, [('N', float_t), ('pT', float_t)]) for (s, _) in species]),
+        ('iden_mean_pT', [(s, mean_pT_t) for (s, _) in species]),
         ('pT_fluct', [('N', int_t), ('sum_pT', float_t), ('sum_pTsq', float_t)]),
-        ('flow', [(expt, [('N', int_t), ('Qn', complex_t, 8)]) for expt in ('alice', 'cms')]),
+        ('flow', [('alice', flow_t), ('cms', flow_t)]),
     ])
 
     def run_single_event(ic, trigger):
@@ -538,7 +543,7 @@ def run_events(args, results_file, checkpoint_ic=None):
         fs = freestream.FreeStreamer(ic, grid_max, args.tau_fs)
 
         # run coarse event on large grid and determine max radius
-        coarse = 3 
+        coarse = 3
 
         rmax = math.sqrt((
             run_hydro(
@@ -612,24 +617,15 @@ def run_events(args, results_file, checkpoint_ic=None):
 
         eta_max = .8
 
-        '''
-        dNch/deta
-
-        '''
+        # dNch/deta
         results['dNch_deta'] = \
             np.count_nonzero(charged & (abs_eta < eta_max)) / (2*eta_max) / nsamples
 
-        '''
-        dET/deta
-
-        '''
+        # dET/deta
         results['dET_deta'] = \
             parts['ET'][abs_eta < eta_max].sum() / (2*eta_max) / nsamples
 
-        '''
-        mean pT
-
-        '''
+        # mean pT
         cut = charged & (abs_eta < eta_max) & (.15 < pT) & (pT < 10.)
         N = np.count_nonzero(cut)
         results['mean_pT'] = (
@@ -637,10 +633,7 @@ def run_events(args, results_file, checkpoint_ic=None):
             (pT[cut].mean() if N > 0 else 0)
         )
 
-        '''
-        identified dN/dy and mean pT
-
-        '''
+        # identified dN/dy and mean pT
         for name, pid in species:
             cut = (abs_ID == pid) & (np.fabs(parts['y']) < .5)
             N = np.count_nonzero(cut)
@@ -650,26 +643,21 @@ def run_events(args, results_file, checkpoint_ic=None):
                 (pT[cut].mean() if N > 0 else 0)
             )
 
-        '''
-        mean pT fluctuations
-
-        '''
+        # mean pT fluctuations
         cut = charged & (abs_eta < .8) & (.15 < pT) & (pT < 2.)
+
         results['pT_fluct']['N'] = pT[cut].size
         results['pT_fluct']['sum_pT'] = pT[cut].sum()
         results['pT_fluct']['sum_pTsq'] = np.inner(pT[cut], pT[cut])
 
-        '''
-        flow Q-vectors
+        # anisotropic flows
+        alice_cut = charged & (abs_eta < .8) & (.2 < pT) & (pT < 5.)
+        cms_cut = charged & (abs_eta < .8) & (.3 < pT) & (pT < 3.)
 
-        '''
-        cut_alice = charged & (abs_eta < .8) & (.2 < pT) & (pT < 5.)
-        cut_cms = charged & (abs_eta < .8) & (.3 < pT) & (pT < 3.) 
-        for expt, cut in [('alice', cut_alice), ('cms', cut_cms)]:
+        for expt, cut in [('alice', alice_cut), ('cms', cms_cut)]:
             results['flow'][expt]['N'] = phi[cut].size
             results['flow'][expt]['Qn'] = [
-                np.exp(1j*n*phi[cut]).sum()
-                for n in range(1, results.dtype['flow'][expt]['Qn'].shape[0] + 1)
+                np.exp(1j*n*phi[cut]).sum() for n in range(1, nharmonic + 1)
             ]
 
     nfail = 0
