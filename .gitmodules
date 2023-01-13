@@ -1,6 +1,6 @@
 [submodule "models/trento"]
 	path = models/trento
-	url = https://github.com/dikelps/trento-partons.git
+	url = https://github.com/dikelps/trento.git
 [submodule "models/freestream"]
 	path = models/freestream
 	url = https://github.com/dikelps/freestream.git
