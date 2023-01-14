@@ -13,6 +13,6 @@
 [submodule "models/urqmd-afterburner"]
 	path = models/urqmd-afterburner
 	url = https://github.com/dikelps/urqmd-afterburner.git
-[submodule "tools/hdf2root/Hifive"]
-	path = tools/hdf2root/Hifive
+[submodule "tools/hdf2root/HighFive"]
+	path = tools/hdf2root/HighFive
 	url = https://github.com/BlueBrain/HighFive.git
