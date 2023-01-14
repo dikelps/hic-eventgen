@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import shutil
 
 import numpy as np
 import h5py
@@ -55,6 +56,7 @@ class Parser(argparse.ArgumentParser):
     ArgumentParser that parses files with 'key = value' lines.
 
     """
+
     def __init__(self, *args, fromfile_prefix_chars='@', **kwargs):
         super().__init__(
             *args, fromfile_prefix_chars=fromfile_prefix_chars, **kwargs
@@ -206,6 +208,10 @@ parser.add_argument(
     '--Tswitch', type=float, default=.150, metavar='FLOAT',
     help='particlization temperature [GeV] (default: %(default).3f GeV)'
 )
+parser.add_argument(
+    '--trento', type=os.path.abspath, metavar='PATH',
+    help='trento initial condition file'
+)
 
 
 class StopEvent(Exception):
@@ -222,6 +228,7 @@ class Trento:
     to mimic the event selection used by experiment.
 
     """
+
     def __init__(self, args, batch_size=10**3, initial_file='initial.hdf'):
         self.args = args
         self.batch_size = batch_size
@@ -247,7 +254,7 @@ class Trento:
         minimum_bias = (0, float('inf'))
 
         pPb_bins = [
-            (  minimum_bias,  8),
+            (minimum_bias,  8),
             ((1.218, 1.303),  4),
             ((1.807, 1.891),  4),
             ((2.395, 2.479),  4),
@@ -296,11 +303,15 @@ class Trento:
             run_cmd(
                 'trento {}'.format(self.system),
                 '--number-events {}'.format(self.batch_size),
-                '--grid-step {} --grid-max {}'.format(self.grid_step, self.grid_max),
-                '--parton-width {}'.format(self.args.parton_width),
+                '--grid-step {} --grid-max {}'.format(
+                    self.grid_step, self.grid_max),
+                '--nucleon-width {}'.format(self.args.parton_width),
                 '--output', self.initial_file,
                 self.args.trento_args,
             )
+            if self.args.trento is not None:
+                logging.info("saving trento file")
+                shutil.copy2(self.initial_file,self.args.trento)
 
             self.used = defaultdict(set)
 
@@ -321,7 +332,7 @@ class Trento:
 
             for ev in filter(trigger_hit, f.values()):
                 self.used[trigger].add(ev.name)
-                return norm*np.array(ev)
+                return (norm*np.array(ev), dict(ev.attrs))
 
             max_event = max(
                 filter(not_used, f.values()),
@@ -350,18 +361,20 @@ class Trento:
         """
         for trigger in self.triggers:
 
-            logging.info('initial entropy/<entropy> trigger: {}'.format(trigger))
-            ic = self.find_event(trigger)
+            logging.info(
+                'initial entropy/<entropy> trigger: {}'.format(trigger))
+            ic, ev_attrs = self.find_event(trigger)
 
             # Write the checkpoint file _before_ starting the event so that
             # even if the process is forcefully killed, the state will be
             # saved.  If / when all events complete, delete the file.
             if self.args.checkpoint is not None:
                 with open(self.args.checkpoint, 'wb') as cf:
-                    pickle.dump((self.args, ic, trigger), cf, pickle.HIGHEST_PROTOCOL)
+                    pickle.dump((self.args, ic, trigger),
+                                cf, pickle.HIGHEST_PROTOCOL)
                 logging.info('wrote checkpoint file %s', self.args.checkpoint)
 
-            yield ic, trigger
+            yield ic, trigger, ev_attrs
 
 
 def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
@@ -375,6 +388,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
     Return True if at least one event completed successfully, otherwise False.
 
     """
+    # particles_file=particles_file.create_group("tree")
     trento_events = Trento(args)
     pPb_event = trento_events.pPb_event
 
@@ -525,8 +539,11 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         ('mean_pT', mean_pT_t),
         ('iden_dN_dy', [(s, float_t) for (s, _) in species]),
         ('iden_mean_pT', [(s, mean_pT_t) for (s, _) in species]),
-        ('pT_fluct', [('N', int_t), ('sum_pT', float_t), ('sum_pTsq', float_t)]),
+        ('pT_fluct', [('N', int_t),
+                      ('sum_pT', float_t), ('sum_pTsq', float_t)]),
         ('flow', [('alice', flow_t), ('cms', flow_t)]),
+        ('b', float_t),
+        ('npart', int_t)
     ])
 
     # UrQMD raw particle format
@@ -542,7 +559,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         ('eta', float)
     ]
 
-    def run_single_event(ic, trigger, event_number):
+    def run_single_event(ic, trigger, evt_attrs, event_number):
         """
         Run the initial condition event contained in HDF5 dataset object `ic`
         and save observables to `results`.
@@ -575,8 +592,10 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         surface = frzout.Surface(**run_hydro(fs, event_size=rmax), ymax=2)
         logging.info('%d freeze-out cells', len(surface))
 
-        minsamples, maxsamples = 10, 10**5  # reasonable range for nsamples
-        minparts = 10**5  # min number of particles to sample
+        # minsamples, maxsamples = 10, 10**5  # reasonable range for nsamples
+        minsamples, maxsamples = 1, 10**5  # no oversample
+        # minparts = 10**5  # min number of particles to sample
+        minparts = 1  # no oversample
         nparts = 0  # for tracking total number of sampled particles
 
         logging.info('sampling surface with frzout')
@@ -630,10 +649,13 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
             # save event to hdf5 data set
             logging.info('saving raw particle data')
 
-            particles_file.create_dataset(
+            dset = particles_file.create_dataset(
                 'event_{}'.format(event_number),
-                data=parts, compression='lzf'
+                data=parts, compression='gzip'
             )
+            dset.attrs.create("b", evt_attrs['b'], dtype=float)
+            dset.attrs.create("npart", evt_attrs['npart'], dtype=int)
+            dset.attrs.create("nsample", nsamples, dtype=int)
 
         logging.info('computing observables')
 
@@ -648,7 +670,8 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
         # dNch/deta
         results['dNch_deta'] = \
-            np.count_nonzero(charged & (abs_eta < eta_max)) / (2*eta_max) / nsamples
+            np.count_nonzero(charged & (abs_eta < eta_max)) / \
+            (2*eta_max) / nsamples
 
         # dET/deta
         results['dET_deta'] = \
@@ -688,15 +711,19 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
             results['flow'][expt]['Qn'] = [
                 np.exp(1j*n*phi[cut]).sum() for n in range(1, nharmonic + 1)
             ]
+        # saving impact parameter and npart from trento
+        # print(evt_attrs)
+        results['npart'] = evt_attrs['npart']
+        results['b'] = evt_attrs['b']
 
     nfail = 0
 
     # run each initial condition event and save results to file
-    for n, (ic, trigger) in enumerate(initial_conditions, start=1):
+    for n, (ic, trigger, evt_attrs) in enumerate(initial_conditions, start=1):
         logging.info('starting event %d', n)
 
         try:
-            run_single_event(ic, trigger, n)
+            run_single_event(ic, trigger, evt_attrs, n)
         except StopEvent as e:
             if particles_file is not None:
                 particles_file.create_dataset(
@@ -806,7 +833,8 @@ def main():
         logging.info('working directory: %s', workdir)
 
         try:
-            status = run_events(args, results_file, particles_file, checkpoint_ic)
+            status = run_events(args, results_file,
+                                particles_file, checkpoint_ic)
         except KeyboardInterrupt:
             # after catching the initial SIGTERM or interrupt, ignore them
             # during shutdown -- this ensures everything will exit gracefully
