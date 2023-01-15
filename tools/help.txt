@@ -1,0 +1,47 @@
+HIC-EVENTGEN
+
+DESCRIPTION
+    The image packs binary excutables for generating heavy-ion collision events. It includes a python wrapper for running the whole process and individual model excutables which can be invoked separately if needed.
+
+SINGULARITY BASICS
+    Singularity is a container engine. You feed a image to it and spin up a container, which is simply a process running on separate filesystem. By default, if you run 
+
+        $ singularity run image.sif
+
+        a preset CMD will be run. In our case, this help text. You can shell into the container using 
+
+        $ singularity shell -eH wrkdir image.sif
+
+        here we used -e to prevent environment variables from entering the container, and -H to mount a directory for writting out data. Without specification, singularity will mount your $HOME directory but this may not be where you want to write your data and, since you have write permission to $HOME, unkown CMD may overwrite important data. In unlikely case, the directory you mounted could collide with the file structure inside the image, do
+
+        $ singularity shell -eH wrkdir:dest image.sif
+
+        where dest is an arbitrary new direcotry that does not exist in the image. Exit the shell with ctl-D.
+
+        You can also issue a command to run in the container, and exit after it's done.
+
+        $ singularity run -eH wrkdir CMD
+
+QUICK START
+    The /playground directory contain paramters and one-liner script for testing the run-events wrapper. First copy the content to your wrkdir(most other directories are not writtable and will be deleted after container is shut down), and run the script.
+
+    $ singularity shell -eH wrkdir image.sif
+    $ cp /playground/* .
+    $ bash test.sh
+
+    This will gnerate trento.h5 and urqmd.h5 files which are the output data for those models. To convert them to the root format, simply run 
+
+    $ hdf2root
+
+    which is a small tool that converts trento.h5 and urqmd.h5 to one out.root.
+
+OFFICIAL DOC
+    This image is built with modifications on https://github.com/Duke-QCD/hic-eventgen. See the website and related papaers for explanation on options that can be supplied to the models.
+
+TRENTO OPTIONS
+    I added option to supply custom nucleus parameters to trento model. See example at /playground/trento_pars if using run-events wrapper, or if running trento directly, see
+    
+    $ trento --help
+
+ROOT TREE ENCODING 
+    Some variables in the tree of the root file is encoded. See the file /playground/enc.cxx for examples on how to decode.

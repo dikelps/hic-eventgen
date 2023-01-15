@@ -1,0 +1,4 @@
+parton-width = 0.88
+trento-args = --normalization 6.6 --reduced-thickness 0 --fluctuation 0.91 --constit-number 6 --constit-width 0.36 --nucleon-min-dist 0.4 --nucleon-number1 96 --half-height-radius1 5.093 --skin-depth1 0.487 --beta1 0.12 --gamma1 0.00
+hydro-args = etas_min=0.134 etas_slope=1.6 etas_crv=-0.29 zetas_max=0.052 zetas_width=0.024 zetas_t0=0.175
+tau-fs = 0.37

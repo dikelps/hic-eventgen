@@ -317,6 +317,7 @@ class Trento:
 
         with h5py.File(self.initial_file, 'r') as f:
 
+            #for the trento output file the normal keys are 2d matrix, attrs keys to the normal keys are event info. For pPb events, a mechanism is implemented such that trigger needs to be satisfied for each event. But since there is no clue on how many are remaining in the batch, rought approximation is made to deplete the batch if 1% of the batch size is used. This is done by setting depleted_batch to True. I don't know why this is necessary, since the filter will spit out nothing if all element in the batch is used.
             mean_mult = np.mean([ev.attrs['mult'] for ev in f.values()])
             nev_used = len([ev for ev in chain(*self.used.values())])
             batch_exhausted = (nev_used > int(1e-2*self.batch_size))
@@ -330,7 +331,11 @@ class Trento:
                 triggered = bin_min < norm*ev.attrs['mult']/mean_mult < bin_max
                 return triggered and not_used(ev) and not depleted_batch
 
-            for ev in filter(trigger_hit, f.values()):
+            def ordered_trento(f):
+                for i in range (self.batch_size):
+                    yield f[f"event_{i}"]
+
+            for ev in filter(trigger_hit, ordered_trento(f)):
                 self.used[trigger].add(ev.name)
                 return (norm*np.array(ev), dict(ev.attrs))
 
@@ -389,7 +394,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
 
     """
     # particles_file=particles_file.create_group("tree")
-    trento_events = Trento(args)
+    trento_events = Trento(args,batch_size=args.nevents)
     pPb_event = trento_events.pPb_event
 
     grid_step = trento_events.grid_step
@@ -719,7 +724,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
     nfail = 0
 
     # run each initial condition event and save results to file
-    for n, (ic, trigger, evt_attrs) in enumerate(initial_conditions, start=1):
+    for n, (ic, trigger, evt_attrs) in enumerate(initial_conditions, start=0):
         logging.info('starting event %d', n)
 
         try:
