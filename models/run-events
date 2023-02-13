@@ -212,6 +212,10 @@ parser.add_argument(
     '--trento', type=os.path.abspath, metavar='PATH',
     help='trento initial condition file'
 )
+parser.add_argument(
+    '--oversample', type=int, default=1, metavar='INT',
+    help='oversample the freezeout surface. Default is no oversample, e.g. 1 sample per event.'
+)
 
 
 class StopEvent(Exception):
@@ -598,7 +602,7 @@ def run_events(args, results_file, particles_file=None, checkpoint_ic=None):
         logging.info('%d freeze-out cells', len(surface))
 
         # minsamples, maxsamples = 10, 10**5  # reasonable range for nsamples
-        minsamples, maxsamples = 1, 10**5  # no oversample
+        minsamples, maxsamples = args.oversample, 10**5  # no oversample
         # minparts = 10**5  # min number of particles to sample
         minparts = 1  # no oversample
         nparts = 0  # for tracking total number of sampled particles
