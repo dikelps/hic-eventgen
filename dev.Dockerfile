@@ -3,7 +3,7 @@ FROM rootproject/root:6.26.10-ubuntu22.04
 WORKDIR /hic-eventgen
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NOWARNINGS="yes"
-RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirror.us-ny2.kamatera.com/ubuntu/|g' /etc/apt/sources.list
+#RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirror.us-ny2.kamatera.com/ubuntu/|g' /etc/apt/sources.list
 RUN apt-get update
 RUN apt-get install -y libhdf5-dev python3-h5py libboost-all-dev cmake python3-setuptools cython3 gfortran build-essential
 RUN apt-get install -y vim
